@@ -34,8 +34,6 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 
 public class Main extends ListenerAdapter {
 
@@ -44,7 +42,6 @@ public class Main extends ListenerAdapter {
     private final Map<String, List<Long>> userMessageTimestamps = new ConcurrentHashMap<>();
     private final Map<String, Integer> userWarnings = new ConcurrentHashMap<>();
 
-    // ─── IDs ──────────────────────────────────────────────────────────────────
     private static final String GUILD_ID             = "1449061779060687063";
     private static final String VERIFY_CHANNEL_ID    = "1464627654744477819";
     private static final String VERIFIED_ROLE_ID     = "1464623361626734637";
@@ -61,8 +58,7 @@ public class Main extends ListenerAdapter {
             "1449070508816728198",
             "1449070445327421682",
             "1457070154226602208",
-            "1457108663603953736",
-            "1457070154226602208"
+            "1457108663603953736"
     );
 
     private static final String SORTEIO_CANAL_LINK  = "https://discord.com/channels/1449061779060687063/1449115997804957806";
@@ -104,16 +100,10 @@ public class Main extends ListenerAdapter {
 
     private static final long DELAY_PER_MESSAGE_MS = 1500;
 
-    // ─── FILA ─────────────────────────────────────────────────────────────────
     private final Map<String, TeamData>        teams  = new ConcurrentHashMap<>();
     private final Map<String, List<QueueEntry>> queues = new ConcurrentHashMap<>();
-
-    // userId -> AgendaEntry
     private final List<AgendaEntry> agendamentos = Collections.synchronizedList(new ArrayList<>());
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  MAIN
-    // ══════════════════════════════════════════════════════════════════════════
     public static void main(String[] args) {
         String token = System.getenv("TOKEN");
         System.out.println(token == null ? "TOKEN ESTA NULL!!!" : "TOKEN OK");
@@ -167,9 +157,6 @@ public class Main extends ListenerAdapter {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  SLASH COMMANDS
-    // ══════════════════════════════════════════════════════════════════════════
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         switch (event.getName()) {
@@ -182,7 +169,6 @@ public class Main extends ListenerAdapter {
         }
     }
 
-    // ── /registrar-time ───────────────────────────────────────────────────────
     private void handleRegistrar(SlashCommandInteractionEvent event) {
         String userId   = event.getUser().getId();
         String nome     = event.getOption("nome", OptionMapping::getAsString);
@@ -225,7 +211,6 @@ public class Main extends ListenerAdapter {
         event.replyEmbeds(embed.build()).setEphemeral(true).queue();
     }
 
-    // ── /fila ─────────────────────────────────────────────────────────────────
     private void handleFila(SlashCommandInteractionEvent event) {
         String userId  = event.getUser().getId();
         String modo    = event.getOption("modo", OptionMapping::getAsString);
@@ -277,7 +262,6 @@ public class Main extends ListenerAdapter {
         }
     }
 
-    // ── processMatch ──────────────────────────────────────────────────────────
     private void processMatch(SlashCommandInteractionEvent event, QueueEntry p1, QueueEntry p2, String modo) {
         logger.info("MATCH: {} vs {} modo {}", p1.username, p2.username, modo);
 
@@ -294,7 +278,6 @@ public class Main extends ListenerAdapter {
         String linkInfo = (hostTeam != null && hostTeam.link != null && !hostTeam.link.isBlank())
                 ? hostTeam.link : "*(sem link — combinem no privado)*";
 
-        // Embed do canal
         EmbedBuilder embedCanal = new EmbedBuilder()
                 .setTitle("🏆  AMISTOSO ENCONTRADO!")
                 .setDescription(
@@ -311,13 +294,26 @@ public class Main extends ListenerAdapter {
                 .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
-        // Ping fora da embed
-        event.getChannel()
-                .sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">")
-                .setEmbeds(embedCanal.build())
-                .queue(ok -> logger.info("Match no canal OK"), err -> logger.warn("Erro canal: {}", err.getMessage()));
+        String targetChannelId = switch (modo) {
+            case "6v6" -> "1449070508816728198";
+            case "5v5" -> "1449070534934401044";
+            case "7v7" -> "1449070445327421682";
+            case "4v4" -> "1457070154226602208";
+            default -> event.getChannel().getId();
+        };
 
-        // DM do HOST
+        TextChannel matchChannel = event.getJDA().getTextChannelById(targetChannelId);
+
+        if (matchChannel != null) {
+            matchChannel.sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">")
+                    .setEmbeds(embedCanal.build())
+                    .queue(ok -> logger.info("Match no canal OK"), err -> logger.warn("Erro canal: {}", err.getMessage()));
+        } else {
+            event.getChannel().sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">")
+                    .setEmbeds(embedCanal.build())
+                    .queue(ok -> logger.info("Match no canal OK"), err -> logger.warn("Erro canal: {}", err.getMessage()));
+        }
+
         EmbedBuilder dmHost = new EmbedBuilder()
                 .setTitle("🏆  AMISTOSO ENCONTRADO!")
                 .setDescription(
@@ -335,7 +331,6 @@ public class Main extends ListenerAdapter {
                 .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
-        // DM do GUEST
         EmbedBuilder dmGuest = new EmbedBuilder()
                 .setTitle("🏆  AMISTOSO ENCONTRADO!")
                 .setDescription(
@@ -370,7 +365,6 @@ public class Main extends ListenerAdapter {
         );
     }
 
-    // ── /sair-fila ────────────────────────────────────────────────────────────
     private void handleSairFila(SlashCommandInteractionEvent event) {
         String userId = event.getUser().getId();
         boolean removed = queues.values().stream()
@@ -389,7 +383,6 @@ public class Main extends ListenerAdapter {
         }
     }
 
-    // ── /fila-status ──────────────────────────────────────────────────────────
     private void handleFilaStatus(SlashCommandInteractionEvent event) {
         boolean vazia = queues.values().stream().allMatch(List::isEmpty);
         if (vazia) {
@@ -423,7 +416,6 @@ public class Main extends ListenerAdapter {
         event.replyEmbeds(embed.build()).setEphemeral(true).queue();
     }
 
-    // ── /agendar ──────────────────────────────────────────────────────────────
     private void handleAgendar(SlashCommandInteractionEvent event) {
         String userId  = event.getUser().getId();
         String modo    = event.getOption("modo", OptionMapping::getAsString);
@@ -440,6 +432,7 @@ public class Main extends ListenerAdapter {
         }
 
         TeamData time = teams.get(userId);
+        agendamentos.add(new AgendaEntry(userId, event.getUser().getAsTag(), time.nome, modo, horario));
 
         EmbedBuilder embed = new EmbedBuilder()
                 .setTitle("📅  Amistoso Agendado!")
@@ -459,13 +452,11 @@ public class Main extends ListenerAdapter {
                 .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
-        // Publica no canal com ping
         event.getChannel()
                 .sendMessage("📣 <@" + userId + ">")
                 .setEmbeds(embed.build())
                 .queue();
 
-        // Confirma ephemeral pra quem agendou
         event.replyEmbeds(new EmbedBuilder()
                         .setTitle("✅  Agendado!")
                         .setDescription("Seu amistoso foi anunciado no canal!\nAguarde alguém entrar em contato.")
@@ -473,7 +464,6 @@ public class Main extends ListenerAdapter {
                         .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON).build())
                 .setEphemeral(true).queue();
 
-        // DM confirmando pro próprio usuário
         sendDM(event.getJDA(), userId, new EmbedBuilder()
                 .setTitle("📅  Amistoso Agendado!")
                 .setDescription(
@@ -487,7 +477,28 @@ public class Main extends ListenerAdapter {
                 .setTimestamp(Instant.now()).build());
     }
 
-    // ── Helpers de fila ───────────────────────────────────────────────────────
+    private void handleAgendas(SlashCommandInteractionEvent event) {
+        if (agendamentos.isEmpty()) {
+            event.replyEmbeds(embedErro("Nenhum Agendamento", "Não há amistosos agendados no momento.").build())
+                    .setEphemeral(true).queue();
+            return;
+        }
+
+        EmbedBuilder embed = new EmbedBuilder()
+                .setTitle("📅  Amistosos Agendados")
+                .setColor(new Color(0x9B59B6))
+                .setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                .setTimestamp(Instant.now());
+
+        for (AgendaEntry agenda : agendamentos) {
+            embed.addField("⚽ " + agenda.modo + " às " + agenda.horario,
+                    "**Time:** " + agenda.teamName + "\n**Líder:** <@" + agenda.userId + ">", false);
+        }
+
+        event.replyEmbeds(embed.build()).setEphemeral(true).queue();
+    }
+
     private boolean isInQueue(String userId) {
         return queues.values().stream().anyMatch(l -> l.stream().anyMatch(e -> e.userId.equals(userId)));
     }
@@ -526,9 +537,6 @@ public class Main extends ListenerAdapter {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  AUTOMOD
-    // ══════════════════════════════════════════════════════════════════════════
     private boolean isAdmin(MessageReceivedEvent event) {
         return event.getMember() != null && event.getMember().hasPermission(Permission.ADMINISTRATOR);
     }
@@ -570,9 +578,6 @@ public class Main extends ListenerAdapter {
                 .queue(msg -> scheduler.schedule(() -> msg.delete().queue(), 60, TimeUnit.SECONDS));
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  MODAL & BOTÃO
-    // ══════════════════════════════════════════════════════════════════════════
     @Override
     public void onModalInteraction(ModalInteractionEvent event) {
         if (!event.getModalId().equals("roblox_modal")) return;
@@ -617,19 +622,16 @@ public class Main extends ListenerAdapter {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  MENSAGENS — automod + !verify / !verifysorteio
-    // ══════════════════════════════════════════════════════════════════════════
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
-        if (event.getAuthor().isBot()) return;
+        if (!event.isFromGuild() || event.getAuthor().isBot() || event.getMember() == null) return;
+
         String raw     = event.getMessage().getContentRaw();
         String lower   = raw.toLowerCase();
         String userId  = event.getAuthor().getId();
         String chanId  = event.getChannel().getId();
 
         if (!isAdmin(event)) {
-            // Anti-spam velocidade
             long now = System.currentTimeMillis();
             userMessageTimestamps.putIfAbsent(userId, new ArrayList<>());
             List<Long> times = userMessageTimestamps.get(userId);
@@ -643,14 +645,13 @@ public class Main extends ListenerAdapter {
                 return;
             }
 
-            // Palavrões
             for (String word : PROFANITY) {
                 if (lower.matches(".*\\b" + word + "\\b.*")) {
                     event.getMessage().delete().queue();
                     int w = userWarnings.getOrDefault(userId, 0) + 1;
                     userWarnings.put(userId, w);
                     if (w >= 3) {
-                        if (event.getMember() != null) event.getMember().timeoutFor(Duration.ofHours(1)).queue();
+                        event.getMember().timeoutFor(Duration.ofHours(1)).queue();
                         sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
                                 "🚫 SILENCIADO 1H", "**3 avisos atingidos!**\n> Timeout de **1 hora**.", Color.RED);
                         sendWarningDM(event.getMember(), "Linguagem inadequada (3x)", "Timeout 1h");
@@ -666,7 +667,6 @@ public class Main extends ListenerAdapter {
                 }
             }
 
-            // GFX
             for (String g : GFX_KEYWORDS) {
                 if (lower.contains(g) && !chanId.equals(GFX_CHANNEL_ID)) {
                     event.getMessage().delete().queue();
@@ -678,7 +678,6 @@ public class Main extends ListenerAdapter {
                 }
             }
 
-            // AMIS
             for (String a : AMIS_KEYWORDS) {
                 if (lower.contains(a)) {
                     if (chanId.equals(FA_ALLOWED_CHANNEL)) continue;
@@ -772,7 +771,7 @@ public class Main extends ListenerAdapter {
                     int w = userWarnings.getOrDefault(userId + "_spam", 0) + 1;
                     userWarnings.put(userId + "_spam", w);
                     if (w >= 2) {
-                        if (event.getMember() != null) event.getMember().timeoutFor(Duration.ofMinutes(30)).queue();
+                        event.getMember().timeoutFor(Duration.ofMinutes(30)).queue();
                         sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
                                 "🚫 SILENCIADO 30min", "**2º aviso spam!**\n> Timeout 30 min.\n> Palavra: `" + kw + "`", Color.RED);
                         sendWarningDM(event.getMember(), "Spam anúncio (2x) - " + kw, "Timeout 30min");
@@ -789,7 +788,6 @@ public class Main extends ListenerAdapter {
             }
         }
 
-        // ── Comandos ! (só admin) ─────────────────────────────────────────────
         if (!isAdmin(event)) return;
 
         if (raw.equalsIgnoreCase("!verify")) {
@@ -831,7 +829,6 @@ public class Main extends ListenerAdapter {
         }
     }
 
-    // ── sendDMToAll (só pro !verifysorteio) ──────────────────────────────────
     private void sendDMToAll(MessageReceivedEvent event, String text, MessageEmbed embed, ActionRow row) {
         event.getGuild().loadMembers().onSuccess(members -> {
             var targets = members.stream().filter(m -> !m.getUser().isBot()).toList();
@@ -857,16 +854,12 @@ public class Main extends ListenerAdapter {
         });
     }
 
-    // ── Helpers embed ─────────────────────────────────────────────────────────
     private EmbedBuilder embedErro(String title, String desc) {
         return new EmbedBuilder().setTitle("❌  " + title).setDescription(desc)
                 .setColor(new Color(0xE74C3C)).setThumbnail(CUSTOM_ICON)
                 .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON);
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  INNER CLASSES
-    // ══════════════════════════════════════════════════════════════════════════
     private static class TeamData {
         final String nome; final boolean temHost; final String link;
         TeamData(String nome, boolean temHost, String link) {
