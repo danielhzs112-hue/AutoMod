@@ -109,6 +109,9 @@ public class Main extends ListenerAdapter {
         System.out.println(token == null ? "TOKEN ESTA NULL!!!" : "TOKEN OK");
 
         try {
+            // Criamos a instância do bot antes para poder chamar métodos dela depois
+            Main botApp = new Main();
+
             var jda = JDABuilder.createDefault(token)
                     .setChunkingFilter(ChunkingFilter.ALL)
                     .setMemberCachePolicy(MemberCachePolicy.ALL)
@@ -119,11 +122,15 @@ public class Main extends ListenerAdapter {
                             GatewayIntent.DIRECT_MESSAGES,
                             GatewayIntent.GUILD_PRESENCES
                     )
-                    .addEventListeners(new Main())
+                    .addEventListeners(botApp) // Adiciona a instância que criamos
                     .build();
 
             jda.awaitReady();
             logger.info("Bot iniciado!");
+
+            // --- AQUI LIGAMOS O SISTEMA DE AVISO ---
+            botApp.iniciarAnuncioAutomatico(jda);
+            // ---------------------------------------
 
             jda.updateCommands().addCommands(
                     Commands.slash("registrar-time", "Registra seu time para amistosos")
@@ -167,6 +174,41 @@ public class Main extends ListenerAdapter {
             case "agendar"        -> handleAgendar(event);
             case "agendas"        -> handleAgendas(event);
         }
+    }
+
+    public void iniciarAnuncioAutomatico(net.dv8tion.jda.api.JDA jda) {
+        scheduler.scheduleAtFixedRate(() -> {
+            try {
+                // 1. Escolher um canal aleatório da lista de amistosos
+                if (AMIS_CHANNELS.isEmpty()) return;
+                String randomChannelId = AMIS_CHANNELS.get(new Random().nextInt(AMIS_CHANNELS.size()));
+                TextChannel channel = jda.getTextChannelById(randomChannelId);
+
+                if (channel != null) {
+                    // 2. Criar a Embed de Dica
+                    EmbedBuilder embed = new EmbedBuilder()
+                            .setTitle("💡  Dica: Encontre partidas mais rápido!")
+                            .setDescription("Cansado de ficar mandando msg procurando time?\n\n" +
+                                    "**USE O SISTEMA AUTOMÁTICO DO BOT:**\n" +
+                                    "1️⃣  Use `/registrar-time` (só uma vez)\n" +
+                                    "2️⃣  Use `/fila` e escolha o modo (5v5, 6v6...)\n\n" +
+                                    "✅ **O bot te avisa na DM quando achar adversário!**\n" +
+                                    "⚡ _É automático, rápido e organiza o host._")
+                            .setColor(new Color(0x3498DB)) // Azul claro
+                            .setThumbnail(CUSTOM_ICON)
+                            .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
+                            .setTimestamp(Instant.now());
+
+                    // 3. Enviar
+                    channel.sendMessageEmbeds(embed.build()).queue(
+                            s -> logger.info("Anuncio automatico enviado no canal: " + channel.getName()),
+                            e -> logger.warn("Nao consegui enviar anuncio no canal " + randomChannelId)
+                    );
+                }
+            } catch (Exception e) {
+                logger.error("Erro no sistema de anuncio automatico", e);
+            }
+        }, 0, 1, TimeUnit.HOURS); // 0 de atraso inicial (manda na hora), repete a cada 1 Hora
     }
 
     private void handleRegistrar(SlashCommandInteractionEvent event) {
