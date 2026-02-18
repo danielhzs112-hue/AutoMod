@@ -244,7 +244,7 @@ public class Main extends ListenerAdapter {
                     .addField("🏠  Host", isHost ? "Sim ✅" : "Não ❌", true)
                     .setColor(new Color(0xF1C40F))
                     .setThumbnail(CUSTOM_ICON)
-                    .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                     .setTimestamp(Instant.now());
             event.replyEmbeds(confirmEmbed.build()).setEphemeral(true).queue();
             processMatch(event, match[0], match[1], modo);
@@ -256,7 +256,7 @@ public class Main extends ListenerAdapter {
                     .addField("🏠  Host", isHost ? "Sim ✅" : "Não ❌", true)
                     .setColor(new Color(0x9B59B6))
                     .setThumbnail(CUSTOM_ICON)
-                    .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                     .setTimestamp(Instant.now());
             event.replyEmbeds(confirmEmbed.build()).setEphemeral(true).queue();
         }
@@ -291,7 +291,7 @@ public class Main extends ListenerAdapter {
                 )
                 .setColor(new Color(0xF1C40F))
                 .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
         String targetChannelId = switch (modo) {
@@ -328,7 +328,7 @@ public class Main extends ListenerAdapter {
                 )
                 .setColor(new Color(0x2ECC71))
                 .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
         EmbedBuilder dmGuest = new EmbedBuilder()
@@ -345,7 +345,7 @@ public class Main extends ListenerAdapter {
                 )
                 .setColor(new Color(0x3498DB))
                 .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
         sendDM(event.getJDA(), hostEntry.userId,  dmHost.build());
@@ -375,7 +375,7 @@ public class Main extends ListenerAdapter {
                             .setTitle("✅  Saiu da fila!")
                             .setDescription("Você saiu da fila com sucesso.")
                             .setColor(new Color(0x2ECC71)).setThumbnail(CUSTOM_ICON)
-                            .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON).build())
+                            .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).build())
                     .setEphemeral(true).queue();
         } else {
             event.replyEmbeds(embedErro("Não estava na fila", "Você não está em nenhuma fila.").build())
@@ -390,7 +390,7 @@ public class Main extends ListenerAdapter {
                             .setTitle("🔍  Fila vazia")
                             .setDescription("Nenhum jogador na fila agora.\nUse `/fila` para entrar!")
                             .setColor(new Color(0x3498DB)).setThumbnail(CUSTOM_ICON)
-                            .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON).build())
+                            .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).build())
                     .setEphemeral(true).queue();
             return;
         }
@@ -449,7 +449,7 @@ public class Main extends ListenerAdapter {
                 )
                 .setColor(new Color(0xF1C40F))
                 .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
         event.getChannel()
@@ -461,7 +461,7 @@ public class Main extends ListenerAdapter {
                         .setTitle("✅  Agendado!")
                         .setDescription("Seu amistoso foi anunciado no canal!\nAguarde alguém entrar em contato.")
                         .setColor(new Color(0x2ECC71)).setThumbnail(CUSTOM_ICON)
-                        .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON).build())
+                        .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).build())
                 .setEphemeral(true).queue();
 
         sendDM(event.getJDA(), userId, new EmbedBuilder()
@@ -473,7 +473,7 @@ public class Main extends ListenerAdapter {
                                 "> Aguarde alguém entrar em contato no privado."
                 )
                 .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                 .setTimestamp(Instant.now()).build());
     }
 
@@ -488,7 +488,7 @@ public class Main extends ListenerAdapter {
                 .setTitle("📅  Amistosos Agendados")
                 .setColor(new Color(0x9B59B6))
                 .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
         for (AgendaEntry agenda : agendamentos) {
@@ -544,13 +544,13 @@ public class Main extends ListenerAdapter {
     private void sendWarningDM(Member member, String reason, String action) {
         member.getUser().openPrivateChannel().queue(ch -> {
             EmbedBuilder embed = new EmbedBuilder()
-                    .setTitle("⚠️  Aviso de Moderação — Pafo")
+                    .setTitle("⚠️  Aviso de Moderação — PAFO")
                     .setDescription("Você recebeu uma advertência no servidor.")
                     .addField("📋  Motivo", reason, false)
                     .addField("⚡  Ação Tomada", action, false)
                     .addField("📌  Dica", "Leia as regras do servidor para evitar futuras punições.", false)
                     .setColor(Color.ORANGE).setThumbnail(CUSTOM_ICON)
-                    .setFooter("Sistema AutoMod • Pafo", CUSTOM_ICON).setTimestamp(Instant.now());
+                    .setFooter("Sistema AutoMod • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
             ch.sendMessageEmbeds(embed.build()).queue(
                     ok  -> logger.info("DM aviso para {}", member.getUser().getName()),
                     err -> logger.warn("DM bloqueada: {}", member.getUser().getName())
@@ -567,14 +567,14 @@ public class Main extends ListenerAdapter {
                 .addField("📋  Motivo", reason, false)
                 .addField("⚡  Ação", action, false)
                 .setColor(Color.RED).setThumbnail(member.getUser().getAvatarUrl())
-                .setFooter("Log Automático • Pafo", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
+                .setFooter("Log Automático • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
     }
 
     private void sendTemporaryWarning(TextChannel channel, Member member, String title, String description, Color color) {
         channel.sendMessageEmbeds(new EmbedBuilder()
                         .setTitle(title).setDescription(member.getAsMention() + " " + description)
                         .setColor(color).setThumbnail(CUSTOM_ICON)
-                        .setFooter("Sistema AutoMod • Pafo", CUSTOM_ICON).setTimestamp(Instant.now()).build())
+                        .setFooter("Sistema AutoMod • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build())
                 .queue(msg -> scheduler.schedule(() -> msg.delete().queue(), 60, TimeUnit.SECONDS));
     }
 
@@ -796,13 +796,13 @@ public class Main extends ListenerAdapter {
             ch.sendMessageEmbeds(new EmbedBuilder()
                             .setTitle("🔐  Verificação do Servidor")
                             .setDescription(
-                                    "**Bem-vindo(a) ao Pafo!** 👋\n\n" +
+                                    "**Bem-vindo(a) ao PAFO!** 👋\n\n" +
                                             "> Para ter acesso completo, verifique-se.\n\n" +
                                             "**📋 Como:**\n1. Clique em **✅ Verificar**\n2. Digite seu user do Roblox\n3. Acesso liberado! 🎉\n\n" +
                                             "**Seu apelido:** SeuNome (@RobloxUser)"
                             )
                             .setColor(new Color(87, 242, 135)).setThumbnail(CUSTOM_ICON)
-                            .setFooter("Sistema de Verificação • Pafo", CUSTOM_ICON).setTimestamp(Instant.now()).build())
+                            .setFooter("Sistema de Verificação • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build())
                     .setActionRow(Button.success("verify_button", "✅ Verificar"))
                     .queue(ok -> event.getChannel().sendMessage("✅ Embed enviada!").queue(),
                             err -> event.getChannel().sendMessage("❌ Erro de permissão.").queue());
@@ -819,7 +819,7 @@ public class Main extends ListenerAdapter {
                                     "🍀 Boa sorte!"
                     )
                     .setColor(new Color(255, 215, 0)).setThumbnail(CUSTOM_ICON)
-                    .setFooter("Pafo • Sorteio", CUSTOM_ICON).setTimestamp(Instant.now());
+                    .setFooter("PAFO • Sorteio", CUSTOM_ICON).setTimestamp(Instant.now());
 
             ActionRow row = ActionRow.of(
                     Button.link(VERIFY_CHANNEL_LINK, "✅ Ir para Verificação"),
@@ -857,7 +857,7 @@ public class Main extends ListenerAdapter {
     private EmbedBuilder embedErro(String title, String desc) {
         return new EmbedBuilder().setTitle("❌  " + title).setDescription(desc)
                 .setColor(new Color(0xE74C3C)).setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON);
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON);
     }
 
     private static class TeamData {
