@@ -844,23 +844,30 @@ public class Main extends ListenerAdapter {
             List<String> emojis = Arrays.asList("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣");
 
             StringBuilder desc = new StringBuilder();
-            desc.append("**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n");
-            desc.append("Vote no melhor staff da semana!\n");
-            desc.append("**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n\n");
+            desc.append("## 🏅 Quem foi o melhor staff desta semana?\n\n");
+            desc.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
 
             for (int i = 0; i < candidatos.size(); i++) {
-                desc.append(emojis.get(i)).append("  <@").append(candidatos.get(i)).append(">\n");
+                desc.append(emojis.get(i))
+                        .append("  <@").append(candidatos.get(i)).append(">\n\n");
             }
 
-            desc.append("\n> 🗳️ Reaja com o emoji do seu favorito!");
+            desc.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            desc.append("> 🗳️ Clique na reação do seu favorito!\n");
+            desc.append("> ⚠️ Apenas **1 voto** por pessoa!\n");
+            desc.append("> ⏰ Encerra em **1 dia!**");
 
             EmbedBuilder embed = new EmbedBuilder()
-                    .setTitle("🏅  STAFF DA SEMANA — Vote!")
+                    .setTitle("🏆  STAFF DA SEMANA  🏆")
                     .setDescription(desc.toString())
-                    .setColor(new Color(0xF1C40F))
+                    .setColor(new Color(0xFFD700))
                     .setThumbnail(CUSTOM_ICON)
-                    .setFooter("Bot PAFO • Enquete Semanal", CUSTOM_ICON)
+                    .addField("📊 Como votar", "Reaja com o número do seu staff favorito abaixo!", false)
+                    .addField("🎖️ Prêmio", "O vencedor poderá ganha cargo UP no servidor!", false)
+                    .setFooter("PAFO • Enquete Semanal  |  Votação aberta!", CUSTOM_ICON)
                     .setTimestamp(Instant.now());
+
+            event.getMessage().delete().queue();
 
             event.getChannel().sendMessageEmbeds(embed.build()).queue(msg -> {
                 for (String emoji : emojis) {
