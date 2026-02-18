@@ -832,6 +832,43 @@ public class Main extends ListenerAdapter {
 
         if (!isAdmin(event)) return;
 
+        if (raw.equalsIgnoreCase("!enquete-staff")) {
+            List<String> candidatos = Arrays.asList(
+                    "1256770517550235730",
+                    "1319821237278474312",
+                    "1456815801054138471",
+                    "1427435337495351366",
+                    "1326384626788204669"
+            );
+
+            List<String> emojis = Arrays.asList("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣");
+
+            StringBuilder desc = new StringBuilder();
+            desc.append("**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n");
+            desc.append("Vote no melhor staff da semana!\n");
+            desc.append("**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n\n");
+
+            for (int i = 0; i < candidatos.size(); i++) {
+                desc.append(emojis.get(i)).append("  <@").append(candidatos.get(i)).append(">\n");
+            }
+
+            desc.append("\n> 🗳️ Reaja com o emoji do seu favorito!");
+
+            EmbedBuilder embed = new EmbedBuilder()
+                    .setTitle("🏅  STAFF DA SEMANA — Vote!")
+                    .setDescription(desc.toString())
+                    .setColor(new Color(0xF1C40F))
+                    .setThumbnail(CUSTOM_ICON)
+                    .setFooter("Bot PAFO • Enquete Semanal", CUSTOM_ICON)
+                    .setTimestamp(Instant.now());
+
+            event.getChannel().sendMessageEmbeds(embed.build()).queue(msg -> {
+                for (String emoji : emojis) {
+                    msg.addReaction(net.dv8tion.jda.api.entities.emoji.Emoji.fromUnicode(emoji)).queue();
+                }
+            });
+        }
+
         if (raw.equalsIgnoreCase("!verify")) {
             TextChannel ch = event.getGuild().getTextChannelById(VERIFY_CHANNEL_ID);
             if (ch == null) { event.getChannel().sendMessage("❌ Canal não encontrado!").queue(); return; }
