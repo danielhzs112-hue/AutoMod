@@ -56,12 +56,8 @@ public class Main extends ListenerAdapter {
     private static final String GFX_CHANNEL_ID       = "1461773344620941534";
 
     private static final List<String> AMIS_CHANNELS = Arrays.asList(
-            "1449070534934401044",
-            "1449070508816728198",
-            "1449070445327421682",
-            "1457070154226602208",
-            "1457108663603953736",
-            "1457070154226602208"
+            "1449070534934401044", "1449070508816728198",
+            "1449070445327421682", "1457070154226602208"
     );
 
     private static final String SORTEIO_CANAL_LINK  = "https://discord.com/channels/1449061779060687063/1449115997804957806";
@@ -276,101 +272,127 @@ public class Main extends ListenerAdapter {
             avisoHost = "\n\n⚠️ Você não tem link de servidor registrado.\nQuando o match acontecer, entre em contato com o adversário no privado para combinar o servidor.";
         }
 
+        // Adiciona na fila ANTES de tentar o match
         QueueEntry entry = new QueueEntry(userId, event.getUser().getAsTag(), modo, isHost);
         queues.computeIfAbsent(modo, k -> Collections.synchronizedList(new ArrayList<>())).add(entry);
 
-        EmbedBuilder confirmEmbed = new EmbedBuilder()
-                .setTitle("🔍 Na fila de " + modo + "!")
-                .setDescription("Aguardando adversário...\nUse `/sair-fila` para cancelar." + avisoHost)
-                .addField("🏆 Seu time", time.nome, true)
-                .addField("🏠 Host", isHost ? "Sim ✅" : "Não ❌", true)
-                .setColor(new Color(0x9B59B6))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
-
-        event.replyEmbeds(confirmEmbed.build()).setEphemeral(true).queue();
-
-        // Tentar match
+        // Tenta match imediatamente após entrar na fila
         QueueEntry[] match = tryMatch(modo);
-        if (match != null) processMatch(event, match[0], match[1], modo);
+
+        if (match != null) {
+            // Match encontrado! Confirma entrada E já avisa do match
+            EmbedBuilder confirmEmbed = new EmbedBuilder()
+                    .setTitle("⚽ Match encontrado na hora!")
+                    .setDescription("Você entrou na fila e já tinha adversário esperando!\nVerifique sua DM para as informações.")
+                    .addField("🏆 Seu time", time.nome, true)
+                    .addField("🏠 Host", isHost ? "Sim ✅" : "Não ❌", true)
+                    .setColor(new Color(0xF1C40F))
+                    .setThumbnail(CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                    .setTimestamp(Instant.now());
+
+            event.replyEmbeds(confirmEmbed.build()).setEphemeral(true).queue();
+            processMatch(event, match[0], match[1], modo);
+        } else {
+            // Sem adversário ainda, fica aguardando
+            EmbedBuilder confirmEmbed = new EmbedBuilder()
+                    .setTitle("🔍 Na fila de " + modo + "!")
+                    .setDescription("Aguardando adversário...\nUse `/sair-fila` para cancelar." + avisoHost)
+                    .addField("🏆 Seu time", time.nome, true)
+                    .addField("🏠 Host", isHost ? "Sim ✅" : "Não ❌", true)
+                    .setColor(new Color(0x9B59B6))
+                    .setThumbnail(CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
+                    .setTimestamp(Instant.now());
+
+            event.replyEmbeds(confirmEmbed.build()).setEphemeral(true).queue();
+        }
     }
 
     private void processMatch(SlashCommandInteractionEvent event, QueueEntry p1, QueueEntry p2, String modo) {
+        logger.info("MATCH ENCONTRADO: {} vs {} no modo {}", p1.username, p2.username, modo);
+
         TeamData t1 = teams.get(p1.userId);
         TeamData t2 = teams.get(p2.userId);
 
-        // Quem é host nesse match específico (decidido na hora do /fila)
-        QueueEntry hostEntry = p1.isHost ? p1 : p2;
-        QueueEntry guestEntry = p1.isHost ? p2 : p1;
-        TeamData   hostTeam  = teams.get(hostEntry.userId);
+        QueueEntry hostEntry  = p1.isHost ? p1 : (p2.isHost ? p2 : p1);
+        QueueEntry guestEntry = hostEntry.userId.equals(p1.userId) ? p2 : p1;
+        TeamData   hostTeam   = teams.get(hostEntry.userId);
 
-        // Link pode ser o registrado no time, ou combinado no pv se não tiver
-        String hostInfo;
-        if (hostTeam != null && hostTeam.link != null && !hostTeam.link.isBlank()) {
-            hostInfo = "\n🔗 **Link do servidor:** " + hostTeam.link;
-        } else {
-            hostInfo = "\n*(Sem link registrado — o host " + (hostTeam != null ? "**" + hostTeam.nome + "**" : hostEntry.username) + " vai te contatar no privado!)*";
-        }
-
-        String nomeT1 = t1 != null ? t1.nome : p1.username;
-        String nomeT2 = t2 != null ? t2.nome : p2.username;
+        String nomeT1   = t1 != null ? t1.nome : p1.username;
+        String nomeT2   = t2 != null ? t2.nome : p2.username;
         String nomeHost = hostTeam != null ? hostTeam.nome : hostEntry.username;
 
-        String descHost = """
-                ## ⚽ MATCH ENCONTRADO!
-                
-                🏆 **%s** vs **%s**
-                🎮 Modo: `%s`
-                🏠 Host: **%s**
-                %s
-                
-                👉 O guest deve entrar em contato com o host no privado!
-                """.formatted(nomeT1, nomeT2, modo, nomeHost, hostInfo);
+        String linkInfo;
+        if (hostTeam != null && hostTeam.link != null && !hostTeam.link.isBlank()) {
+            linkInfo = hostTeam.link;
+        } else {
+            linkInfo = "*(sem link — combinem no privado)*";
+        }
 
-        String descGuest = """
-                ## ⚽ MATCH ENCONTRADO!
-                
-                🏆 **%s** vs **%s**
-                🎮 Modo: `%s`
-                🏠 Host: **%s**
-                %s
-                
-                👉 Entre em contato com o host: <@%s>
-                """.formatted(nomeT1, nomeT2, modo, nomeHost, hostInfo, hostEntry.userId);
-
-        EmbedBuilder embedHost = new EmbedBuilder()
-                .setTitle("⚽ Match Encontrado!")
-                .setDescription(descHost)
+        // Embed que vai no canal (público, menciona os dois)
+        EmbedBuilder embedCanal = new EmbedBuilder()
+                .setTitle("⚽ MATCH ENCONTRADO! — " + modo)
+                .setDescription("""
+                        <@%s> e <@%s> foram casados!
+                        
+                        🏆 **%s** vs **%s**
+                        🏠 Host: **%s**
+                        🔗 %s
+                        
+                        👉 Entrem em contato no privado para confirmar!
+                        """.formatted(p1.userId, p2.userId, nomeT1, nomeT2, nomeHost, linkInfo))
                 .setColor(new Color(0xF1C40F))
                 .setThumbnail(CUSTOM_ICON)
                 .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
                 .setTimestamp(Instant.now());
 
-        EmbedBuilder embedGuest = new EmbedBuilder()
-                .setTitle("⚽ Match Encontrado!")
-                .setDescription(descGuest)
-                .setColor(new Color(0xF1C40F))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+        // Manda no canal onde o comando foi usado (visível pra todos)
+        event.getChannel().sendMessageEmbeds(embedCanal.build()).queue(
+                ok  -> logger.info("Match anunciado no canal com sucesso"),
+                err -> logger.warn("Erro ao anunciar no canal: {}", err.getMessage())
+        );
 
-        // Host recebe info do adversário
-        notifyUserDM(event, hostEntry.userId, embedHost.build());
-        // Guest recebe info de quem é o host com menção
-        notifyUserDM(event, guestEntry.userId, embedGuest.build());
+        // Também tenta mandar DM pra cada um
+        String dmHost = """
+                ## ⚽ Match Encontrado!
+                🏆 **%s** vs **%s**
+                🎮 Modo: `%s`
+                🏠 Você é o **HOST**
+                🔗 %s
+                👤 Adversário: <@%s>
+                """.formatted(nomeT1, nomeT2, modo, linkInfo, guestEntry.userId);
 
-        logger.info("MATCH: {} vs {} no modo {}", p1.username, p2.username, modo);
+        String dmGuest = """
+                ## ⚽ Match Encontrado!
+                🏆 **%s** vs **%s**
+                🎮 Modo: `%s`
+                🏠 Host: **%s**
+                🔗 %s
+                👤 Entre em contato com o host: <@%s>
+                """.formatted(nomeT1, nomeT2, modo, nomeHost, linkInfo, hostEntry.userId);
+
+        notifyUserDM(event, hostEntry.userId,
+                new EmbedBuilder().setTitle("⚽ Match!").setDescription(dmHost)
+                        .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
+                        .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON).setTimestamp(Instant.now()).build());
+
+        notifyUserDM(event, guestEntry.userId,
+                new EmbedBuilder().setTitle("⚽ Match!").setDescription(dmGuest)
+                        .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
+                        .setFooter("Bot Amistosos • Pafo", CUSTOM_ICON).setTimestamp(Instant.now()).build());
     }
 
     private void notifyUserDM(SlashCommandInteractionEvent event, String userId, MessageEmbed embed) {
-        event.getJDA().retrieveUserById(userId).queue(user ->
-                user.openPrivateChannel().queue(ch ->
-                        ch.sendMessageEmbeds(embed).queue(
+        event.getJDA().retrieveUserById(userId).queue(
+                user -> user.openPrivateChannel().queue(
+                        ch -> ch.sendMessageEmbeds(embed).queue(
                                 ok  -> logger.info("DM enviada para {}", user.getAsTag()),
-                                err -> logger.warn("Não foi possível enviar DM para {}", user.getAsTag())
-                        )
-                )
+                                err -> logger.warn("DM bloqueada para {} — já foi avisado no canal", user.getAsTag())
+                        ),
+                        err -> logger.warn("Não conseguiu abrir DM com {}", userId)
+                ),
+                err -> logger.warn("Não encontrou usuário {}", userId)
         );
     }
 
@@ -480,24 +502,41 @@ public class Main extends ListenerAdapter {
     }
 
     private QueueEntry[] tryMatch(String modo) {
-        List<QueueEntry> list = queues.getOrDefault(modo, Collections.emptyList());
+        // computeIfAbsent garante que sempre pegamos a lista real registrada no mapa
+        List<QueueEntry> list = queues.computeIfAbsent(modo, k -> Collections.synchronizedList(new ArrayList<>()));
         synchronized (list) {
-            if (list.size() >= 2) {
-                QueueEntry host  = list.stream().filter(e -> e.isHost).findFirst().orElse(null);
-                QueueEntry guest = list.stream().filter(e -> !e.isHost).findFirst().orElse(null);
+            if (list.size() < 2) return null;
 
-                QueueEntry p1, p2;
-                if (host != null && guest != null && !host.userId.equals(guest.userId)) {
-                    p1 = host; p2 = guest;
-                } else {
-                    p1 = list.get(0); p2 = list.get(1);
-                    if (p1.userId.equals(p2.userId)) return null;
-                }
-                list.remove(p1); list.remove(p2);
-                return new QueueEntry[]{p1, p2};
+            // Tenta casar host com não-host (ideal)
+            QueueEntry host  = null;
+            QueueEntry guest = null;
+            for (QueueEntry e : list) {
+                if (e.isHost && host == null)  host  = e;
+                if (!e.isHost && guest == null) guest = e;
+                if (host != null && guest != null) break;
             }
+
+            QueueEntry p1, p2;
+            if (host != null && guest != null && !host.userId.equals(guest.userId)) {
+                // Caso ideal: um host e um guest
+                p1 = host; p2 = guest;
+            } else {
+                // Dois hosts ou dois guests: pega os dois primeiros diferentes
+                p1 = list.get(0);
+                p2 = null;
+                for (int i = 1; i < list.size(); i++) {
+                    if (!list.get(i).userId.equals(p1.userId)) {
+                        p2 = list.get(i);
+                        break;
+                    }
+                }
+                if (p2 == null) return null; // só tem uma pessoa na fila (duplicada)
+            }
+
+            list.remove(p1);
+            list.remove(p2);
+            return new QueueEntry[]{p1, p2};
         }
-        return null;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
