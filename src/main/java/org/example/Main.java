@@ -34,6 +34,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 
 public class Main extends ListenerAdapter {
 
@@ -106,6 +108,9 @@ public class Main extends ListenerAdapter {
     private final Map<String, TeamData>        teams  = new ConcurrentHashMap<>();
     private final Map<String, List<QueueEntry>> queues = new ConcurrentHashMap<>();
 
+    // userId -> AgendaEntry
+    private final List<AgendaEntry> agendamentos = Collections.synchronizedList(new ArrayList<>());
+
     // ══════════════════════════════════════════════════════════════════════════
     //  MAIN
     // ══════════════════════════════════════════════════════════════════════════
@@ -152,7 +157,8 @@ public class Main extends ListenerAdapter {
                                             .addChoice("5v5","5v5").addChoice("6v6","6v6")
                                             .addChoice("7v7","7v7").addChoice("4v4","4v4"),
                                     new OptionData(OptionType.STRING, "horario", "Horário (ex: 19:30)", true)
-                            )
+                            ),
+                    Commands.slash("agendas", "Ver todos os amistosos agendados")
             ).queue();
 
             logger.info("Slash commands registrados!");
@@ -172,6 +178,7 @@ public class Main extends ListenerAdapter {
             case "sair-fila"      -> handleSairFila(event);
             case "fila-status"    -> handleFilaStatus(event);
             case "agendar"        -> handleAgendar(event);
+            case "agendas"        -> handleAgendas(event);
         }
     }
 
@@ -871,6 +878,14 @@ public class Main extends ListenerAdapter {
         final String userId, username, modo; final boolean isHost;
         QueueEntry(String userId, String username, String modo, boolean isHost) {
             this.userId = userId; this.username = username; this.modo = modo; this.isHost = isHost;
+        }
+    }
+
+    private static class AgendaEntry {
+        final String userId, username, teamName, modo, horario;
+        AgendaEntry(String userId, String username, String teamName, String modo, String horario) {
+            this.userId = userId; this.username = username; this.teamName = teamName;
+            this.modo = modo; this.horario = horario;
         }
     }
 }
