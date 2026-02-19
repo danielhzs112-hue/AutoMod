@@ -48,6 +48,8 @@ public class Main extends ListenerAdapter {
     private static final String OLHEIRO_ROLE_ID      = "1449070067131224268";
     private static final String SCRIM_HOSTER_ROLE_ID = "1449070133040517262";
     private static final String FA_ALLOWED_CHANNEL   = "1461773344620941534";
+    // Cargo que pode mandar links, gifs e imagens em qualquer canal sem punição
+    private static final String MEDIA_ALLOWED_ROLE_ID = "1450118477179260948";
     private static final String PENEIRA_CHANNEL      = "1449069785601282068";
     private static final String SCRIM_CHANNEL        = "1450548729303011379";
     private static final String LOG_CHANNEL_ID       = "1449525327175880865";
@@ -59,6 +61,13 @@ public class Main extends ListenerAdapter {
             "1449070445327421682",
             "1457070154226602208",
             "1457108663603953736"
+    );
+
+    // ─── Canais 100% isentos de AutoMod (free-leagues e free-links) ───────────
+    // Nesses canais NÃO há filtro de palavrão, spam, links, nada.
+    private static final List<String> AUTOMOD_EXEMPT_CHANNELS = Arrays.asList(
+            "1449070133778714738", // free-leagues
+            "1449112362912186389"  // free-links
     );
 
     private static final String SORTEIO_CANAL_LINK  = "https://discord.com/channels/1449061779060687063/1449115997804957806";
@@ -87,29 +96,52 @@ public class Main extends ListenerAdapter {
             "busco owner", "falta", "membros pra", "criar logo", "logo de league",
             "logo gratis", "logo de graça", "técnico de league", "procuro técnico", "busco técnico"
     );
-    private static final List<String> PROFANITY = Arrays.asList(
-            "porra", "caralho", "fdp", "buceta", "merda", "puta", "arrombado", "cuzão",
-            "puta que pariu", "vai tomar no cu", "filho da puta", "vsf", "vtnc", "cu",
+
+    // ─── Palavrões PESADOS — sempre puníveis (fora de ticket/isentos) ──────────
+    private static final List<String> PROFANITY_HEAVY = Arrays.asList(
+            "porra", "caralho", "fdp", "buceta", "puta", "arrombado", "cuzão",
+            "puta que pariu", "vai tomar no cu", "filho da puta", "vsf", "vtnc",
             "puta merda", "vai se foder", "foda-se", "foda", "cacete", "desgraça",
-            "desgraçado", "otário", "idiota", "imbecil", "burro", "retardado", "mongol",
-            "bosta", "corno", "viado", "gay", "bicha", "traveco", "sapatão", "vagabunda",
+            "desgraçado", "otário", "imbecil", "retardado", "mongol",
+            "bosta", "corno", "viado", "bicha", "traveco", "sapatão", "vagabunda",
             "prostituta", "piranha", "vadia", "putaria", "pornografia", "punheta", "broxa",
-            "penis", "vagina", "pau", "pinto", "rola", "pirocão", "piroca", "xoxota",
-            "xereca", "bucetão", "rabo", "bunda", "peito", "teta", "mama"
+            "penis", "vagina", "pinto", "rola", "pirocão", "piroca", "xoxota",
+            "xereca", "bucetão", "peito", "teta", "mama"
+    );
+
+    // ─── Palavrões LEVES — SÓ punidos se NÃO houver contexto de denúncia ──────
+    // "cu", "merda", "idiota", "burro", "pau", "rabo", "bunda", "gay" entram aqui
+    // pois podem aparecer em frases neutras ou de denúncia legítima.
+    private static final List<String> PROFANITY_LIGHT = Arrays.asList(
+            "cu", "merda", "idiota", "burro", "pau", "rabo", "bunda", "gay"
+    );
+
+    // ─── Contexto de denúncia: se a msg contiver qualquer dessas palavras,
+    //     os palavrões LEVES são ignorados (a pessoa está relatando algo). ───────
+    private static final List<String> REPORT_CONTEXT = Arrays.asList(
+            "racismo", "racista", "ofendeu", "xingou", "ameaçou",
+            "discriminação", "homofobia", "homofóbico", "preconceito",
+            "abuso", "assédio", "tóxico", "toxicidade",
+            "reportar", "denunciar", "denuncia", "denúncia",
+            "no amis", "no amistoso", "no jogo", "na partida",
+            "fui xingado", "me chamou", "me xingou", "chamou de",
+            "fez racismo", "disse que", "falou que"
     );
 
     private static final long DELAY_PER_MESSAGE_MS = 1500;
 
-    private final Map<String, TeamData>        teams  = new ConcurrentHashMap<>();
-    private final Map<String, List<QueueEntry>> queues = new ConcurrentHashMap<>();
-    private final List<AgendaEntry> agendamentos = Collections.synchronizedList(new ArrayList<>());
+    private final Map<String, TeamData>         teams        = new ConcurrentHashMap<>();
+    private final Map<String, List<QueueEntry>> queues       = new ConcurrentHashMap<>();
+    private final List<AgendaEntry>             agendamentos = Collections.synchronizedList(new ArrayList<>());
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // MAIN
+    // ══════════════════════════════════════════════════════════════════════════
     public static void main(String[] args) {
         String token = System.getenv("TOKEN");
         System.out.println(token == null ? "TOKEN ESTA NULL!!!" : "TOKEN OK");
 
         try {
-            // Criamos a instância do bot antes para poder chamar métodos dela depois
             Main botApp = new Main();
 
             var jda = JDABuilder.createDefault(token)
@@ -122,22 +154,20 @@ public class Main extends ListenerAdapter {
                             GatewayIntent.DIRECT_MESSAGES,
                             GatewayIntent.GUILD_PRESENCES
                     )
-                    .addEventListeners(botApp) // Adiciona a instância que criamos
+                    .addEventListeners(botApp)
                     .build();
 
             jda.awaitReady();
             logger.info("Bot iniciado!");
 
-            // --- AQUI LIGAMOS O SISTEMA DE AVISO ---
             botApp.iniciarAnuncioAutomatico(jda);
-            // ---------------------------------------
 
             jda.updateCommands().addCommands(
                     Commands.slash("registrar-time", "Registra seu time para amistosos")
                             .addOptions(
-                                    new OptionData(OptionType.STRING,  "nome",           "Nome do seu time",                           true),
-                                    new OptionData(OptionType.BOOLEAN, "seu-host",        "Você tem servidor privado (host próprio)?",  true),
-                                    new OptionData(OptionType.STRING,  "link-servidor",   "Link do seu servidor privado (se tiver)",    false)
+                                    new OptionData(OptionType.STRING,  "nome",          "Nome do seu time",                          true),
+                                    new OptionData(OptionType.BOOLEAN, "seu-host",       "Você tem servidor privado (host próprio)?", true),
+                                    new OptionData(OptionType.STRING,  "link-servidor",  "Link do seu servidor privado (se tiver)",   false)
                             ),
                     Commands.slash("fila", "Entrar na fila de amistosos")
                             .addOptions(
@@ -164,6 +194,75 @@ public class Main extends ListenerAdapter {
         }
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // HELPERS DE AUTOMOD
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Retorna true se o canal é isento TOTAL do AutoMod.
+     * Canais isentos: free-leagues, free-links, e qualquer canal de ticket
+     * (nome começa com "ticket-", ex: ticket-420).
+     */
+    private boolean isExemptChannel(String channelId, String channelName) {
+        if (AUTOMOD_EXEMPT_CHANNELS.contains(channelId)) return true;
+        if (channelName != null && channelName.toLowerCase().startsWith("ticket-")) return true;
+        return false;
+    }
+
+    /**
+     * Detecta se a mensagem tem contexto de denúncia.
+     * Se verdadeiro, palavrões LEVES NÃO são punidos.
+     */
+    private boolean hasReportContext(String lower) {
+        for (String kw : REPORT_CONTEXT) {
+            if (lower.contains(kw)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Detecta "keyboard spam" / "flood de teclas aleatórias".
+     * Exemplos: "hsahdsaudadisasaiu", "asduaisdui", "qweasdzxc", "aaaaaaaaaa"
+     *
+     * Critérios (qualquer um basta):
+     *  1. 5+ consoantes seguidas sem vogal (ex: "hsdgh")
+     *  2. Mesmo caractere repetido 6+ vezes (ex: "aaaaaaa", "kkkkkkk")
+     *  3. Sequências de teclado conhecidas (qwert, asdfg, etc.)
+     *  4. Texto com 12+ chars e menos de 15% de vogais
+     */
+    private boolean isKeyboardSpam(String text) {
+        if (text == null || text.length() < 6) return false;
+        String lower = text.toLowerCase();
+
+        // 1. Bloco de 5+ consoantes sem vogal
+        if (lower.matches(".*[bcdfghjklmnpqrstvwxyz]{5,}.*")) return true;
+
+        // 2. Mesmo char repetido 6+ vezes
+        if (lower.matches(".*(.)\\1{5,}.*")) return true;
+
+        // 3. Sequências de teclado
+        String[] seqs = {"qwert", "asdfg", "zxcvb", "yuiop", "hjkl",
+                "bnmv", "qazwsx", "wsxedc", "edcrfv", "rfvtgb", "tgbyhn"};
+        for (String seq : seqs) {
+            if (lower.contains(seq)) return true;
+        }
+
+        // 4. Proporção de vogais muito baixa em texto longo
+        if (lower.length() >= 12) {
+            long vogais = lower.chars()
+                    .filter(c -> "aeiouáéíóúàèìòùãõâêîôû".indexOf(c) >= 0)
+                    .count();
+            double ratio = (double) vogais / lower.length();
+            if (ratio < 0.15) return true;
+        }
+
+        return false;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SLASH COMMANDS
+    // ══════════════════════════════════════════════════════════════════════════
+
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         switch (event.getName()) {
@@ -176,16 +275,18 @@ public class Main extends ListenerAdapter {
         }
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // ANUNCIO AUTOMATICO
+    // ══════════════════════════════════════════════════════════════════════════
+
     public void iniciarAnuncioAutomatico(net.dv8tion.jda.api.JDA jda) {
         scheduler.scheduleAtFixedRate(() -> {
             try {
-                // 1. Escolher um canal aleatório da lista de amistosos
                 if (AMIS_CHANNELS.isEmpty()) return;
                 String randomChannelId = AMIS_CHANNELS.get(new Random().nextInt(AMIS_CHANNELS.size()));
                 TextChannel channel = jda.getTextChannelById(randomChannelId);
 
                 if (channel != null) {
-                    // 2. Criar a Embed de Dica
                     EmbedBuilder embed = new EmbedBuilder()
                             .setTitle("💡  Dica: Encontre partidas mais rápido!")
                             .setDescription("Cansado de ficar mandando msg procurando time?\n\n" +
@@ -194,22 +295,25 @@ public class Main extends ListenerAdapter {
                                     "2️⃣  Use `/fila` e escolha o modo (5v5, 6v6...)\n\n" +
                                     "✅ **O bot te avisa na DM quando achar adversário!**\n" +
                                     "⚡ _É automático, rápido e organiza o host._")
-                            .setColor(new Color(0x3498DB)) // Azul claro
+                            .setColor(new Color(0x3498DB))
                             .setThumbnail(CUSTOM_ICON)
                             .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
                             .setTimestamp(Instant.now());
 
-                    // 3. Enviar
                     channel.sendMessageEmbeds(embed.build()).queue(
-                            s -> logger.info("Anuncio automatico enviado no canal: " + channel.getName()),
+                            s -> logger.info("Anuncio automatico enviado: " + channel.getName()),
                             e -> logger.warn("Nao consegui enviar anuncio no canal " + randomChannelId)
                     );
                 }
             } catch (Exception e) {
-                logger.error("Erro no sistema de anuncio automatico", e);
+                logger.error("Erro no anuncio automatico", e);
             }
-        }, 0, 1, TimeUnit.HOURS); // 0 de atraso inicial (manda na hora), repete a cada 1 Hora
+        }, 0, 1, TimeUnit.HOURS);
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // HANDLERS DE FILA / TIME
+    // ══════════════════════════════════════════════════════════════════════════
 
     private void handleRegistrar(SlashCommandInteractionEvent event) {
         String userId   = event.getUser().getId();
@@ -236,8 +340,7 @@ public class Main extends ListenerAdapter {
         boolean atualizando = anterior != null;
         teams.put(userId, new TeamData(nome, temHost, link));
 
-        String desc = atualizando
-                ? "Time atualizado! Se estava na fila, saia e entre novamente." : "";
+        String desc = atualizando ? "Time atualizado! Se estava na fila, saia e entre novamente." : "";
 
         EmbedBuilder embed = new EmbedBuilder()
                 .setTitle((atualizando ? "✏️" : "✅") + "  Time " + (atualizando ? "Atualizado" : "Registrado") + "!")
@@ -259,8 +362,7 @@ public class Main extends ListenerAdapter {
         boolean isHost = Boolean.TRUE.equals(event.getOption("seu-host", OptionMapping::getAsBoolean));
 
         if (!teams.containsKey(userId)) {
-            event.replyEmbeds(embedErro("Time não registrado",
-                            "Use `/registrar-time` primeiro!").build())
+            event.replyEmbeds(embedErro("Time não registrado", "Use `/registrar-time` primeiro!").build())
                     .setEphemeral(true).queue(); return;
         }
         if (isInQueue(userId)) {
@@ -284,10 +386,8 @@ public class Main extends ListenerAdapter {
                     .setDescription("Você entrou e já havia adversário!\n📩 **Verifique sua DM** para os detalhes.")
                     .addField("🏆  Seu time", "**" + time.nome + "**", true)
                     .addField("🏠  Host", isHost ? "Sim ✅" : "Não ❌", true)
-                    .setColor(new Color(0xF1C40F))
-                    .setThumbnail(CUSTOM_ICON)
-                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                    .setTimestamp(Instant.now());
+                    .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
             event.replyEmbeds(confirmEmbed.build()).setEphemeral(true).queue();
             processMatch(event, match[0], match[1], modo);
         } else {
@@ -296,10 +396,8 @@ public class Main extends ListenerAdapter {
                     .setDescription("Aguardando adversário...\nUse `/sair-fila` para cancelar." + avisoHost)
                     .addField("🏆  Seu time", "**" + time.nome + "**", true)
                     .addField("🏠  Host", isHost ? "Sim ✅" : "Não ❌", true)
-                    .setColor(new Color(0x9B59B6))
-                    .setThumbnail(CUSTOM_ICON)
-                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                    .setTimestamp(Instant.now());
+                    .setColor(new Color(0x9B59B6)).setThumbnail(CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
             event.replyEmbeds(confirmEmbed.build()).setEphemeral(true).queue();
         }
     }
@@ -329,31 +427,27 @@ public class Main extends ListenerAdapter {
                                 "🎮  Modo: **" + modo + "**\n" +
                                 "🏠  Host: **" + nomeHost + "**\n" +
                                 "🔗  " + linkInfo + "\n\n" +
-                                "> 📩 Verifiquem a DM para detalhes!"
-                )
-                .setColor(new Color(0xF1C40F))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                                "> 📩 Verifiquem a DM para detalhes!")
+                .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
         String targetChannelId = switch (modo) {
             case "6v6" -> "1449070508816728198";
             case "5v5" -> "1449070534934401044";
             case "7v7" -> "1449070445327421682";
             case "4v4" -> "1457070154226602208";
-            default -> event.getChannel().getId();
+            default    -> event.getChannel().getId();
         };
 
         TextChannel matchChannel = event.getJDA().getTextChannelById(targetChannelId);
-
         if (matchChannel != null) {
             matchChannel.sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">")
                     .setEmbeds(embedCanal.build())
-                    .queue(ok -> logger.info("Match no canal OK"), err -> logger.warn("Erro canal: {}", err.getMessage()));
+                    .queue(ok -> logger.info("Match canal OK"), err -> logger.warn("Erro canal: {}", err.getMessage()));
         } else {
             event.getChannel().sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">")
                     .setEmbeds(embedCanal.build())
-                    .queue(ok -> logger.info("Match no canal OK"), err -> logger.warn("Erro canal: {}", err.getMessage()));
+                    .queue(ok -> logger.info("Match canal OK"), err -> logger.warn("Erro canal: {}", err.getMessage()));
         }
 
         EmbedBuilder dmHost = new EmbedBuilder()
@@ -362,16 +456,12 @@ public class Main extends ListenerAdapter {
                         "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n" +
                                 "## ⚽  " + nomeT1 + "  ×  " + nomeT2 + "\n" +
                                 "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n\n" +
-                                "🎮  Modo: **" + modo + "**\n" +
-                                "🏠  Você é o **HOST!**\n" +
+                                "🎮  Modo: **" + modo + "**\n🏠  Você é o **HOST!**\n" +
                                 "🔗  Seu servidor: " + linkInfo + "\n" +
                                 "👤  Adversário: <@" + guestEntry.userId + "> — **" + nomeT2 + "**\n\n" +
-                                "> 💬 Aguarde o adversário ou chame no privado!"
-                )
-                .setColor(new Color(0x2ECC71))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                                "> 💬 Aguarde o adversário ou chame no privado!")
+                .setColor(new Color(0x2ECC71)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
         EmbedBuilder dmGuest = new EmbedBuilder()
                 .setTitle("🏆  AMISTOSO ENCONTRADO!")
@@ -379,16 +469,12 @@ public class Main extends ListenerAdapter {
                         "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n" +
                                 "## ⚽  " + nomeT1 + "  ×  " + nomeT2 + "\n" +
                                 "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n\n" +
-                                "🎮  Modo: **" + modo + "**\n" +
-                                "🏠  Host: **" + nomeHost + "**\n" +
+                                "🎮  Modo: **" + modo + "**\n🏠  Host: **" + nomeHost + "**\n" +
                                 "🔗  Servidor: " + linkInfo + "\n" +
                                 "👤  Chame o host: <@" + hostEntry.userId + "> — **" + nomeHost + "**\n\n" +
-                                "> 💬 Chame o host no privado para confirmar!"
-                )
-                .setColor(new Color(0x3498DB))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                                "> 💬 Chame o host no privado para confirmar!")
+                .setColor(new Color(0x3498DB)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
         sendDM(event.getJDA(), hostEntry.userId,  dmHost.build());
         sendDM(event.getJDA(), guestEntry.userId, dmGuest.build());
@@ -409,13 +495,11 @@ public class Main extends ListenerAdapter {
 
     private void handleSairFila(SlashCommandInteractionEvent event) {
         String userId = event.getUser().getId();
-        boolean removed = queues.values().stream()
-                .anyMatch(list -> list.removeIf(e -> e.userId.equals(userId)));
+        boolean removed = queues.values().stream().anyMatch(list -> list.removeIf(e -> e.userId.equals(userId)));
 
         if (removed) {
             event.replyEmbeds(new EmbedBuilder()
-                            .setTitle("✅  Saiu da fila!")
-                            .setDescription("Você saiu da fila com sucesso.")
+                            .setTitle("✅  Saiu da fila!").setDescription("Você saiu da fila com sucesso.")
                             .setColor(new Color(0x2ECC71)).setThumbnail(CUSTOM_ICON)
                             .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).build())
                     .setEphemeral(true).queue();
@@ -429,8 +513,7 @@ public class Main extends ListenerAdapter {
         boolean vazia = queues.values().stream().allMatch(List::isEmpty);
         if (vazia) {
             event.replyEmbeds(new EmbedBuilder()
-                            .setTitle("🔍  Fila vazia")
-                            .setDescription("Nenhum jogador na fila agora.\nUse `/fila` para entrar!")
+                            .setTitle("🔍  Fila vazia").setDescription("Nenhum jogador na fila agora.\nUse `/fila` para entrar!")
                             .setColor(new Color(0x3498DB)).setThumbnail(CUSTOM_ICON)
                             .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).build())
                     .setEphemeral(true).queue();
@@ -438,11 +521,8 @@ public class Main extends ListenerAdapter {
         }
 
         EmbedBuilder embed = new EmbedBuilder()
-                .setTitle("🔍  Status das Filas")
-                .setColor(new Color(0x9B59B6))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("🏠 = Host  |  🎮 = Sem host", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                .setTitle("🔍  Status das Filas").setColor(new Color(0x9B59B6)).setThumbnail(CUSTOM_ICON)
+                .setFooter("🏠 = Host  |  🎮 = Sem host", CUSTOM_ICON).setTimestamp(Instant.now());
 
         for (String modo : List.of("5v5","6v6","7v7","4v4")) {
             List<QueueEntry> lista = queues.getOrDefault(modo, Collections.emptyList());
@@ -464,8 +544,7 @@ public class Main extends ListenerAdapter {
         String horario = event.getOption("horario", OptionMapping::getAsString);
 
         if (!teams.containsKey(userId)) {
-            event.replyEmbeds(embedErro("Time não registrado",
-                            "Use `/registrar-time` primeiro!").build())
+            event.replyEmbeds(embedErro("Time não registrado", "Use `/registrar-time` primeiro!").build())
                     .setEphemeral(true).queue(); return;
         }
         if (horario == null || !horario.matches("^([01]?\\d|2[0-3]):[0-5]\\d$")) {
@@ -487,17 +566,11 @@ public class Main extends ListenerAdapter {
                                 "🕐  Horário: **" + horario + "**\n" +
                                 "🏠  Host: " + (time.temHost ? "Sim ✅" : "Não ❌") + "\n" +
                                 (time.temHost && time.link != null ? "🔗  " + time.link + "\n" : "") +
-                                "\n> 💬 Entre em contato no privado para confirmar!"
-                )
-                .setColor(new Color(0xF1C40F))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                                "\n> 💬 Entre em contato no privado para confirmar!")
+                .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
-        event.getChannel()
-                .sendMessage("📣 <@" + userId + ">")
-                .setEmbeds(embed.build())
-                .queue();
+        event.getChannel().sendMessage("📣 <@" + userId + ">").setEmbeds(embed.build()).queue();
 
         event.replyEmbeds(new EmbedBuilder()
                         .setTitle("✅  Agendado!")
@@ -508,15 +581,10 @@ public class Main extends ListenerAdapter {
 
         sendDM(event.getJDA(), userId, new EmbedBuilder()
                 .setTitle("📅  Amistoso Agendado!")
-                .setDescription(
-                        "Seu amistoso foi anunciado no canal!\n\n" +
-                                "🎮  Modo: **" + modo + "**\n" +
-                                "🕐  Horário: **" + horario + "**\n\n" +
-                                "> Aguarde alguém entrar em contato no privado."
-                )
+                .setDescription("Seu amistoso foi anunciado no canal!\n\n🎮  Modo: **" + modo +
+                        "**\n🕐  Horário: **" + horario + "**\n\n> Aguarde alguém entrar em contato no privado.")
                 .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now()).build());
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build());
     }
 
     private void handleAgendas(SlashCommandInteractionEvent event) {
@@ -527,273 +595,115 @@ public class Main extends ListenerAdapter {
         }
 
         EmbedBuilder embed = new EmbedBuilder()
-                .setTitle("📅  Amistosos Agendados")
-                .setColor(new Color(0x9B59B6))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                .setTitle("📅  Amistosos Agendados").setColor(new Color(0x9B59B6)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
         for (AgendaEntry agenda : agendamentos) {
             embed.addField("⚽ " + agenda.modo + " às " + agenda.horario,
                     "**Time:** " + agenda.teamName + "\n**Líder:** <@" + agenda.userId + ">", false);
         }
-
         event.replyEmbeds(embed.build()).setEphemeral(true).queue();
     }
 
-    private boolean isInQueue(String userId) {
-        return queues.values().stream().anyMatch(l -> l.stream().anyMatch(e -> e.userId.equals(userId)));
-    }
-
-    private String getQueueMode(String userId) {
-        for (var entry : queues.entrySet())
-            if (entry.getValue().stream().anyMatch(e -> e.userId.equals(userId)))
-                return entry.getKey();
-        return null;
-    }
-
-    private QueueEntry[] tryMatch(String modo) {
-        List<QueueEntry> list = queues.computeIfAbsent(modo, k -> Collections.synchronizedList(new ArrayList<>()));
-        synchronized (list) {
-            if (list.size() < 2) return null;
-
-            QueueEntry host = null, guest = null;
-            for (QueueEntry e : list) {
-                if (e.isHost  && host  == null) host  = e;
-                if (!e.isHost && guest == null) guest = e;
-                if (host != null && guest != null) break;
-            }
-
-            QueueEntry p1, p2;
-            if (host != null && guest != null && !host.userId.equals(guest.userId)) {
-                p1 = host; p2 = guest;
-            } else {
-                p1 = list.get(0); p2 = null;
-                for (int i = 1; i < list.size(); i++) {
-                    if (!list.get(i).userId.equals(p1.userId)) { p2 = list.get(i); break; }
-                }
-                if (p2 == null) return null;
-            }
-            list.remove(p1); list.remove(p2);
-            return new QueueEntry[]{p1, p2};
-        }
-    }
-
-    private boolean isAdmin(MessageReceivedEvent event) {
-        return event.getMember() != null && event.getMember().hasPermission(Permission.ADMINISTRATOR);
-    }
-
-    private void sendWarningDM(Member member, String reason, String action) {
-        member.getUser().openPrivateChannel().queue(ch -> {
-            EmbedBuilder embed = new EmbedBuilder()
-                    .setTitle("⚠️  Aviso de Moderação — PAFO")
-                    .setDescription("Você recebeu uma advertência no servidor.")
-                    .addField("📋  Motivo", reason, false)
-                    .addField("⚡  Ação Tomada", action, false)
-                    .addField("📌  Dica", "Leia as regras do servidor para evitar futuras punições.", false)
-                    .setColor(Color.ORANGE).setThumbnail(CUSTOM_ICON)
-                    .setFooter("Sistema AutoMod • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
-            ch.sendMessageEmbeds(embed.build()).queue(
-                    ok  -> logger.info("DM aviso para {}", member.getUser().getName()),
-                    err -> logger.warn("DM bloqueada: {}", member.getUser().getName())
-            );
-        }, err -> logger.warn("Sem DM: {}", member.getUser().getName()));
-    }
-
-    private void logPunishment(Guild guild, Member member, String reason, String action) {
-        TextChannel ch = guild.getTextChannelById(LOG_CHANNEL_ID);
-        if (ch == null) return;
-        ch.sendMessageEmbeds(new EmbedBuilder()
-                .setTitle("🛡️  Registro de Punição")
-                .addField("👤  Usuário", member.getAsMention() + " (" + member.getId() + ")", false)
-                .addField("📋  Motivo", reason, false)
-                .addField("⚡  Ação", action, false)
-                .setColor(Color.RED).setThumbnail(member.getUser().getAvatarUrl())
-                .setFooter("Log Automático • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
-    }
-
-    private void sendTemporaryWarning(TextChannel channel, Member member, String title, String description, Color color) {
-        channel.sendMessageEmbeds(new EmbedBuilder()
-                        .setTitle(title).setDescription(member.getAsMention() + " " + description)
-                        .setColor(color).setThumbnail(CUSTOM_ICON)
-                        .setFooter("Sistema AutoMod • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build())
-                .queue(msg -> scheduler.schedule(() -> msg.delete().queue(), 60, TimeUnit.SECONDS));
-    }
-
-    @Override
-    public void onModalInteraction(ModalInteractionEvent event) {
-        if (!event.getModalId().equals("roblox_modal")) return;
-        var input = event.getValue("roblox_username");
-        String robloxUser = input != null ? input.getAsString() : "Desconhecido";
-        Member member = event.getMember();
-        if (member == null) { event.reply("❌ Membro não encontrado.").setEphemeral(true).queue(); return; }
-
-        String newNick = member.getEffectiveName() + " (@" + robloxUser + ")";
-        if (newNick.length() > 32) newNick = newNick.substring(0, 32);
-        String finalNick = newNick;
-        member.modifyNickname(finalNick).queue(
-                ok  -> addRoleAndReply(event, member, finalNick, true),
-                err -> addRoleAndReply(event, member, finalNick, false)
-        );
-    }
-
-    private void addRoleAndReply(ModalInteractionEvent event, Member member, String newNick, boolean nickChanged) {
-        Role r = event.getGuild().getRoleById(VERIFIED_ROLE_ID);
-        if (r != null) event.getGuild().addRoleToMember(member, r).queue();
-        event.reply(nickChanged
-                        ? "✅ **VERIFICADO!** 🎉\n\n**Novo apelido:** " + newNick + "\n\nAcesso liberado! 🚀"
-                        : "✅ **VERIFICADO!** 🎉\n\n(Não consegui alterar o apelido — falta de permissão.)\nAltere manualmente para: " + newNick)
-                .setEphemeral(true).queue();
-    }
-
-    @Override
-    public void onButtonInteraction(ButtonInteractionEvent event) {
-        if (event.getComponentId().equals("verify_button")) {
-            Member member = event.getMember();
-            if (member == null) { event.reply("❌ Erro.").setEphemeral(true).queue(); return; }
-            Role r = event.getGuild().getRoleById(VERIFIED_ROLE_ID);
-            if (r != null && member.getRoles().contains(r)) {
-                event.reply("✅ Você já está verificado!").setEphemeral(true).queue(); return;
-            }
-            TextInput input = TextInput.create("roblox_username","Nome de usuário do Roblox", TextInputStyle.SHORT)
-                    .setPlaceholder("Digite seu usuário do Roblox").setRequired(true).setMaxLength(20).build();
-            event.replyModal(Modal.create("roblox_modal","🎮 Verificação Roblox").addActionRow(input).build()).queue();
-
-        } else if (event.getComponentId().equals("go_sorteio")) {
-            event.reply("🎁 **Link do Sorteio:**\n" + SORTEIO_CANAL_LINK + "\n\nBoa sorte! 🍀").setEphemeral(true).queue();
-        }
-    }
+    // ══════════════════════════════════════════════════════════════════════════
+    // EVENTO DE MENSAGEM (comandos ! + AutoMod)
+    // ══════════════════════════════════════════════════════════════════════════
 
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
         if (!event.isFromGuild() || event.getAuthor().isBot() || event.getMember() == null) return;
 
-        String raw    = event.getMessage().getContentRaw();
-        String lower  = raw.toLowerCase();
-        String userId = event.getAuthor().getId();
-        String chanId = event.getChannel().getId();
+        String raw     = event.getMessage().getContentRaw();
+        String lower   = raw.toLowerCase();
+        String userId  = event.getAuthor().getId();
+        String chanId  = event.getChannel().getId();
+        String chanName = event.getChannel().getName(); // para checar "ticket-XXX"
 
-        // ==================== COMANDOS DE AMISTOSO POR ! (MEMBROS) ====================
+        // ── Comandos de amistoso por ! ─────────────────────────────────────────
 
         if (raw.startsWith("!registrar-time ")) {
             String nome = raw.substring(16).trim();
-
             if (nome.isBlank()) {
-                event.getChannel().sendMessage("❌ Uso correto: `!registrar-time NomeDoTime`").queue();
-                return;
+                event.getChannel().sendMessage("❌ Uso correto: `!registrar-time NomeDoTime`").queue(); return;
             }
-
-            boolean temHost = false;
-            String link = null;
+            boolean temHost = false; String link = null;
             TeamData anterior = teams.get(userId);
-            if (anterior != null) {
-                temHost = anterior.temHost;
-                link = anterior.link;
-            }
-
+            if (anterior != null) { temHost = anterior.temHost; link = anterior.link; }
             teams.put(userId, new TeamData(nome, temHost, link));
 
-            EmbedBuilder embed = new EmbedBuilder()
+            event.getChannel().sendMessageEmbeds(new EmbedBuilder()
                     .setTitle("✅  Time Registrado!")
                     .setDescription("Use `!fila 5v5` para entrar na fila de amistosos!")
                     .addField("🏆  Time", "**" + nome + "**", true)
                     .addField("🏠  Host", temHost ? "Sim ✅" : "Não ❌", true)
-                    .setColor(new Color(0x2ECC71))
-                    .setThumbnail(CUSTOM_ICON)
-                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                    .setTimestamp(Instant.now());
-
-            event.getChannel().sendMessageEmbeds(embed.build()).queue();
+                    .setColor(new Color(0x2ECC71)).setThumbnail(CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
             return;
         }
 
         if (raw.startsWith("!registrar-host ")) {
             String link = raw.substring(16).trim();
-
             if (!teams.containsKey(userId)) {
-                event.getChannel().sendMessage("❌ Registre seu time primeiro: `!registrar-time NomeDoTime`").queue();
-                return;
+                event.getChannel().sendMessage("❌ Registre seu time primeiro: `!registrar-time NomeDoTime`").queue(); return;
             }
-
             TeamData atual = teams.get(userId);
             teams.put(userId, new TeamData(atual.nome, true, link.isBlank() ? null : link));
 
-            EmbedBuilder embed = new EmbedBuilder()
-                    .setTitle("🏠  Host Registrado!")
-                    .setDescription("Seu servidor privado foi salvo!")
+            event.getChannel().sendMessageEmbeds(new EmbedBuilder()
+                    .setTitle("🏠  Host Registrado!").setDescription("Seu servidor privado foi salvo!")
                     .addField("🏆  Time", "**" + atual.nome + "**", true)
                     .addField("🔗  Link", link.isBlank() ? "*(nenhum)*" : link, false)
-                    .setColor(new Color(0x3498DB))
-                    .setThumbnail(CUSTOM_ICON)
-                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                    .setTimestamp(Instant.now());
-
-            event.getChannel().sendMessageEmbeds(embed.build()).queue();
+                    .setColor(new Color(0x3498DB)).setThumbnail(CUSTOM_ICON)
+                    .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
             return;
         }
 
         if (raw.startsWith("!fila ")) {
             String modo = raw.substring(6).trim().toLowerCase();
             List<String> modos = Arrays.asList("5v5", "6v6", "7v7", "4v4");
-
             if (!modos.contains(modo)) {
-                event.getChannel().sendMessage("❌ Modo inválido! Use: `!fila 5v5` | `!fila 6v6` | `!fila 7v7` | `!fila 4v4`").queue();
-                return;
+                event.getChannel().sendMessage("❌ Modo inválido! Use: `!fila 5v5` | `!fila 6v6` | `!fila 7v7` | `!fila 4v4`").queue(); return;
             }
             if (!teams.containsKey(userId)) {
-                event.getChannel().sendMessage("❌ <@" + userId + "> Registre seu time primeiro: `!registrar-time NomeDoTime`").queue();
-                return;
+                event.getChannel().sendMessage("❌ <@" + userId + "> Registre seu time primeiro: `!registrar-time NomeDoTime`").queue(); return;
             }
             if (isInQueue(userId)) {
-                event.getChannel().sendMessage("❌ <@" + userId + "> Você já está na fila de **" + getQueueMode(userId) + "**! Use `!sair-fila` para sair.").queue();
-                return;
+                event.getChannel().sendMessage("❌ <@" + userId + "> Você já está na fila de **" + getQueueMode(userId) + "**! Use `!sair-fila` para sair.").queue(); return;
             }
 
             TeamData time = teams.get(userId);
             boolean isHost = time.temHost;
-
             QueueEntry entry = new QueueEntry(userId, event.getAuthor().getAsTag(), modo, isHost);
             queues.computeIfAbsent(modo, k -> Collections.synchronizedList(new ArrayList<>())).add(entry);
-
             QueueEntry[] match = tryMatch(modo);
 
             if (match != null) {
-                EmbedBuilder embed = new EmbedBuilder()
+                event.getChannel().sendMessageEmbeds(new EmbedBuilder()
                         .setTitle("⚽  Match na hora!")
                         .setDescription("Você entrou e já havia adversário!\n📩 **Verifique sua DM** para os detalhes.")
                         .addField("🏆  Seu time", "**" + time.nome + "**", true)
                         .addField("🏠  Host", isHost ? "Sim ✅" : "Não ❌", true)
-                        .setColor(new Color(0xF1C40F))
-                        .setThumbnail(CUSTOM_ICON)
-                        .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                        .setTimestamp(Instant.now());
-                event.getChannel().sendMessageEmbeds(embed.build()).queue();
+                        .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
+                        .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
                 processMatchFromMessage(event, match[0], match[1], modo);
             } else {
-                EmbedBuilder embed = new EmbedBuilder()
+                event.getChannel().sendMessageEmbeds(new EmbedBuilder()
                         .setTitle("🔍  Na fila de " + modo + "!")
                         .setDescription("Aguardando adversário...\nUse `!sair-fila` para cancelar.")
                         .addField("🏆  Seu time", "**" + time.nome + "**", true)
                         .addField("🏠  Host", isHost ? "Sim ✅" : "Não ❌", true)
-                        .setColor(new Color(0x9B59B6))
-                        .setThumbnail(CUSTOM_ICON)
-                        .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                        .setTimestamp(Instant.now());
-                event.getChannel().sendMessageEmbeds(embed.build()).queue();
+                        .setColor(new Color(0x9B59B6)).setThumbnail(CUSTOM_ICON)
+                        .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
             }
             return;
         }
 
         if (raw.equalsIgnoreCase("!sair-fila")) {
-            boolean removed = queues.values().stream()
-                    .anyMatch(list -> list.removeIf(e -> e.userId.equals(userId)));
-
+            boolean removed = queues.values().stream().anyMatch(list -> list.removeIf(e -> e.userId.equals(userId)));
             if (removed) {
                 event.getChannel().sendMessageEmbeds(new EmbedBuilder()
-                        .setTitle("✅  Saiu da fila!")
-                        .setDescription("<@" + userId + "> saiu da fila com sucesso.")
-                        .setColor(new Color(0x2ECC71))
-                        .setThumbnail(CUSTOM_ICON)
+                        .setTitle("✅  Saiu da fila!").setDescription("<@" + userId + "> saiu da fila com sucesso.")
+                        .setColor(new Color(0x2ECC71)).setThumbnail(CUSTOM_ICON)
                         .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).build()).queue();
             } else {
                 event.getChannel().sendMessage("❌ <@" + userId + "> Você não está em nenhuma fila.").queue();
@@ -805,21 +715,14 @@ public class Main extends ListenerAdapter {
             boolean vazia = queues.values().stream().allMatch(List::isEmpty);
             if (vazia) {
                 event.getChannel().sendMessageEmbeds(new EmbedBuilder()
-                        .setTitle("🔍  Fila vazia")
-                        .setDescription("Nenhum jogador na fila agora.\nUse `!fila 5v5` para entrar!")
-                        .setColor(new Color(0x3498DB))
-                        .setThumbnail(CUSTOM_ICON)
+                        .setTitle("🔍  Fila vazia").setDescription("Nenhum jogador na fila agora.\nUse `!fila 5v5` para entrar!")
+                        .setColor(new Color(0x3498DB)).setThumbnail(CUSTOM_ICON)
                         .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).build()).queue();
                 return;
             }
-
             EmbedBuilder embed = new EmbedBuilder()
-                    .setTitle("🔍  Status das Filas")
-                    .setColor(new Color(0x9B59B6))
-                    .setThumbnail(CUSTOM_ICON)
-                    .setFooter("🏠 = Host  |  🎮 = Sem host", CUSTOM_ICON)
-                    .setTimestamp(Instant.now());
-
+                    .setTitle("🔍  Status das Filas").setColor(new Color(0x9B59B6)).setThumbnail(CUSTOM_ICON)
+                    .setFooter("🏠 = Host  |  🎮 = Sem host", CUSTOM_ICON).setTimestamp(Instant.now());
             for (String m : List.of("5v5","6v6","7v7","4v4")) {
                 List<QueueEntry> lista = queues.getOrDefault(m, Collections.emptyList());
                 if (!lista.isEmpty()) {
@@ -835,44 +738,63 @@ public class Main extends ListenerAdapter {
             return;
         }
 
-        // ==================== AUTOMOD ====================
+        // ══════════════════════════════════════════════════════════════════════
+        // AUTOMOD
+        // ══════════════════════════════════════════════════════════════════════
 
         if (!isAdmin(event)) {
+
+            // ── 0. Canais totalmente isentos (free-leagues, free-links, tickets) ──
+            if (isExemptChannel(chanId, chanName)) return;
+
+            // ── 1. Anti-flood de velocidade (5+ msgs em 5s) ───────────────────────
             long now = System.currentTimeMillis();
             userMessageTimestamps.putIfAbsent(userId, new ArrayList<>());
             List<Long> times = userMessageTimestamps.get(userId);
-            times.add(now); times.removeIf(t -> now - t > 5000);
+            times.add(now);
+            times.removeIf(t -> now - t > 5000);
             if (times.size() >= 5) {
                 event.getMessage().delete().queue();
                 sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
                         "⚠️ SPAM DETECTADO", "**Pare de enviar mensagens tão rápido!**\n> 5+ msgs em 5 segundos.", Color.ORANGE);
-                sendWarningDM(event.getMember(), "Spam (5+ em 5s)", "Mensagem deletada");
+                sendWarningDM(event.getMember(), "Spam velocidade (5+ em 5s)", "Mensagem deletada");
                 logPunishment(event.getGuild(), event.getMember(), "Spam velocidade", "Deletado");
                 return;
             }
 
-            for (String word : PROFANITY) {
-                if (lower.matches(".*\\b" + word + "\\b.*")) {
-                    event.getMessage().delete().queue();
-                    int w = userWarnings.getOrDefault(userId, 0) + 1;
-                    userWarnings.put(userId, w);
-                    if (w >= 3) {
-                        event.getMember().timeoutFor(Duration.ofHours(1)).queue();
-                        sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
-                                "🚫 SILENCIADO 1H", "**3 avisos atingidos!**\n> Timeout de **1 hora**.", Color.RED);
-                        sendWarningDM(event.getMember(), "Linguagem inadequada (3x)", "Timeout 1h");
-                        logPunishment(event.getGuild(), event.getMember(), "Linguagem (3x)", "Timeout 1h");
-                        userWarnings.put(userId, 0);
-                    } else {
-                        sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
-                                "⚠️ AVISO " + w + "/3", "**Linguagem inadequada!**\n> No 3º aviso: timeout 1h.", Color.ORANGE);
-                        sendWarningDM(event.getMember(), "Linguagem inadequada", "Aviso " + w + "/3");
-                        logPunishment(event.getGuild(), event.getMember(), "Linguagem", "Aviso " + w + "/3");
-                    }
+            // ── 2. Anti-flood de teclado aleatório (hsahdsaudad, qweasdzxc...) ────
+            if (isKeyboardSpam(lower)) {
+                event.getMessage().delete().queue();
+                sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
+                        "⚠️ MENSAGEM INVÁLIDA",
+                        "**Não mande texto aleatório no chat!**\n> Envie uma mensagem real.", Color.ORANGE);
+                sendWarningDM(event.getMember(), "Flood de teclado aleatório", "Mensagem deletada");
+                logPunishment(event.getGuild(), event.getMember(), "Keyboard spam", "Deletado");
+                return;
+            }
+
+            // ── 3. Filtro de palavrões PESADOS (sempre puníveis) ─────────────────
+            for (String word : PROFANITY_HEAVY) {
+                // Escapa caracteres especiais de regex e usa boundary
+                String escaped = word.replace(".", "\\.").replace("?", "\\?")
+                        .replace("(", "\\(").replace(")", "\\)").replace("-", "\\-");
+                if (lower.matches(".*\\b" + escaped + "\\b.*") || lower.contains(word)) {
+                    applyProfanityPunishment(event, userId, word);
                     return;
                 }
             }
 
+            // ── 4. Filtro de palavrões LEVES (ignorados em contexto de denúncia) ─
+            if (!hasReportContext(lower)) {
+                for (String word : PROFANITY_LIGHT) {
+                    if (lower.matches(".*\\b" + word + "\\b.*")) {
+                        applyProfanityPunishment(event, userId, word);
+                        return;
+                    }
+                }
+            }
+
+            // ── 5. GFX no canal errado ────────────────────────────────────────────
             for (String g : GFX_KEYWORDS) {
                 if (lower.contains(g) && !chanId.equals(GFX_CHANNEL_ID)) {
                     event.getMessage().delete().queue();
@@ -884,6 +806,7 @@ public class Main extends ListenerAdapter {
                 }
             }
 
+            // ── 6. Amistoso no canal errado ───────────────────────────────────────
             for (String a : AMIS_KEYWORDS) {
                 if (lower.contains(a)) {
                     if (chanId.equals(FA_ALLOWED_CHANNEL)) continue;
@@ -900,8 +823,14 @@ public class Main extends ListenerAdapter {
                 }
             }
 
+            // ── 7. Links ──────────────────────────────────────────────────────────
             boolean hasRoblox = lower.matches(".*(roblox\\.com|ro\\.blox\\.com|rblx\\.co).*");
             boolean hasOther  = lower.matches(".*(https?://|www\\.|discord\\.gg/)\\S+.*") && !hasRoblox;
+
+            // Cargo com permissão total de links/gifs/imagens — pula todos os filtros de link
+            boolean hasMediaRole = event.getMember().getRoles().stream()
+                    .anyMatch(r -> r.getId().equals(MEDIA_ALLOWED_ROLE_ID));
+            if (hasMediaRole && (hasRoblox || hasOther)) return;
 
             if (hasRoblox && chanId.equals("1453095863823110184")) return;
 
@@ -950,6 +879,7 @@ public class Main extends ListenerAdapter {
                 return;
             }
 
+            // ── 8. F/A no canal errado ────────────────────────────────────────────
             if ((lower.contains("f/a") || lower.matches(".*\\bf/a\\b.*")) && !chanId.equals(FA_ALLOWED_CHANNEL)) {
                 event.getMessage().delete().queue();
                 sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
@@ -959,6 +889,7 @@ public class Main extends ListenerAdapter {
                 return;
             }
 
+            // ── 9. Peneira sem Olheiro ────────────────────────────────────────────
             if (lower.contains("peneira para") || lower.contains("peneira pro")) {
                 boolean ok = event.getMember().getRoles().stream().anyMatch(r -> r.getId().equals(OLHEIRO_ROLE_ID));
                 if (!ok) {
@@ -971,6 +902,7 @@ public class Main extends ListenerAdapter {
                 }
             }
 
+            // ── 10. Spam de anúncios ──────────────────────────────────────────────
             for (String kw : SPAM_KEYWORDS) {
                 if (lower.contains(kw)) {
                     event.getMessage().delete().queue();
@@ -994,19 +926,18 @@ public class Main extends ListenerAdapter {
             }
         }
 
-        // ==================== COMANDOS ADMIN ====================
+        // ══════════════════════════════════════════════════════════════════════
+        // COMANDOS ADMIN
+        // ══════════════════════════════════════════════════════════════════════
 
         if (!isAdmin(event)) return;
 
         if (raw.equalsIgnoreCase("!enquete-staff")) {
             List<String> candidatos = Arrays.asList(
-                    "1256770517550235730",
-                    "1319821237278474312",
-                    "1456815801054138471",
-                    "1427435337495351366",
-                    "1326384626788204669"
+                    "1256770517550235730","1319821237278474312","1456815801054138471",
+                    "1427435337495351366","1326384626788204669"
             );
-            List<String> emojis = Arrays.asList("1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣");
+            List<String> emojis = Arrays.asList("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣");
 
             StringBuilder desc = new StringBuilder();
             desc.append("## 🏅 Quem foi o melhor staff desta semana?\n\n");
@@ -1020,14 +951,11 @@ public class Main extends ListenerAdapter {
             desc.append("> ⏰ Encerra em **7 dias**");
 
             EmbedBuilder embed = new EmbedBuilder()
-                    .setTitle("🏆  STAFF DA SEMANA  🏆")
-                    .setDescription(desc.toString())
-                    .setColor(new Color(0xFFD700))
-                    .setThumbnail(CUSTOM_ICON)
+                    .setTitle("🏆  STAFF DA SEMANA  🏆").setDescription(desc.toString())
+                    .setColor(new Color(0xFFD700)).setThumbnail(CUSTOM_ICON)
                     .addField("📊 Como votar", "Reaja com o número do seu staff favorito abaixo!", false)
                     .addField("🎖️ Prêmio", "O vencedor ganha destaque especial no servidor!", false)
-                    .setFooter("PAFO • Enquete Semanal  |  Votação aberta!", CUSTOM_ICON)
-                    .setTimestamp(Instant.now());
+                    .setFooter("PAFO • Enquete Semanal  |  Votação aberta!", CUSTOM_ICON).setTimestamp(Instant.now());
 
             event.getMessage().delete().queue();
             event.getChannel().sendMessageEmbeds(embed.build()).queue(msg -> {
@@ -1042,12 +970,10 @@ public class Main extends ListenerAdapter {
             if (ch == null) { event.getChannel().sendMessage("❌ Canal não encontrado!").queue(); return; }
             ch.sendMessageEmbeds(new EmbedBuilder()
                             .setTitle("🔐  Verificação do Servidor")
-                            .setDescription(
-                                    "**Bem-vindo(a) ao PAFO!** 👋\n\n" +
-                                            "> Para ter acesso completo, verifique-se.\n\n" +
-                                            "**📋 Como:**\n1. Clique em **✅ Verificar**\n2. Digite seu user do Roblox\n3. Acesso liberado! 🎉\n\n" +
-                                            "**Seu apelido:** SeuNome (@RobloxUser)"
-                            )
+                            .setDescription("**Bem-vindo(a) ao PAFO!** 👋\n\n" +
+                                    "> Para ter acesso completo, verifique-se.\n\n" +
+                                    "**📋 Como:**\n1. Clique em **✅ Verificar**\n2. Digite seu user do Roblox\n3. Acesso liberado! 🎉\n\n" +
+                                    "**Seu apelido:** SeuNome (@RobloxUser)")
                             .setColor(new Color(87, 242, 135)).setThumbnail(CUSTOM_ICON)
                             .setFooter("Sistema de Verificação • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build())
                     .setActionRow(Button.success("verify_button", "✅ Verificar"))
@@ -1058,13 +984,10 @@ public class Main extends ListenerAdapter {
         if (raw.equalsIgnoreCase("!verifysorteio")) {
             EmbedBuilder e = new EmbedBuilder()
                     .setTitle("🎁  SORTEIO DE OLHEIRO GRÁTIS!")
-                    .setDescription(
-                            "## 🔥 SORTEIO ESPECIAL 🔥\n\n" +
-                                    "Estamos sorteando **OLHEIRO DE GRAÇA**!\n\n" +
-                                    "> 1️⃣ Clique em **Ir para Verificação**\n" +
-                                    "> 2️⃣ Verifique-se\n> 3️⃣ Clique em **Participar do Sorteio**\n\n" +
-                                    "🍀 Boa sorte!"
-                    )
+                    .setDescription("## 🔥 SORTEIO ESPECIAL 🔥\n\n" +
+                            "Estamos sorteando **OLHEIRO DE GRAÇA**!\n\n" +
+                            "> 1️⃣ Clique em **Ir para Verificação**\n" +
+                            "> 2️⃣ Verifique-se\n> 3️⃣ Clique em **Participar do Sorteio**\n\n🍀 Boa sorte!")
                     .setColor(new Color(255, 215, 0)).setThumbnail(CUSTOM_ICON)
                     .setFooter("PAFO • Sorteio", CUSTOM_ICON).setTimestamp(Instant.now());
 
@@ -1076,7 +999,79 @@ public class Main extends ListenerAdapter {
         }
     }
 
-// ==================== MÉTODO processMatchFromMessage ====================
+    // ══════════════════════════════════════════════════════════════════════════
+    // MODAL / BUTTON
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Override
+    public void onModalInteraction(ModalInteractionEvent event) {
+        if (!event.getModalId().equals("roblox_modal")) return;
+        var input = event.getValue("roblox_username");
+        String robloxUser = input != null ? input.getAsString() : "Desconhecido";
+        Member member = event.getMember();
+        if (member == null) { event.reply("❌ Membro não encontrado.").setEphemeral(true).queue(); return; }
+
+        String newNick = member.getEffectiveName() + " (@" + robloxUser + ")";
+        if (newNick.length() > 32) newNick = newNick.substring(0, 32);
+        String finalNick = newNick;
+        member.modifyNickname(finalNick).queue(
+                ok  -> addRoleAndReply(event, member, finalNick, true),
+                err -> addRoleAndReply(event, member, finalNick, false)
+        );
+    }
+
+    private void addRoleAndReply(ModalInteractionEvent event, Member member, String newNick, boolean nickChanged) {
+        Role r = event.getGuild().getRoleById(VERIFIED_ROLE_ID);
+        if (r != null) event.getGuild().addRoleToMember(member, r).queue();
+        event.reply(nickChanged
+                        ? "✅ **VERIFICADO!** 🎉\n\n**Novo apelido:** " + newNick + "\n\nAcesso liberado! 🚀"
+                        : "✅ **VERIFICADO!** 🎉\n\n(Não consegui alterar o apelido — falta de permissão.)\nAltere manualmente para: " + newNick)
+                .setEphemeral(true).queue();
+    }
+
+    @Override
+    public void onButtonInteraction(ButtonInteractionEvent event) {
+        if (event.getComponentId().equals("verify_button")) {
+            Member member = event.getMember();
+            if (member == null) { event.reply("❌ Erro.").setEphemeral(true).queue(); return; }
+            Role r = event.getGuild().getRoleById(VERIFIED_ROLE_ID);
+            if (r != null && member.getRoles().contains(r)) {
+                event.reply("✅ Você já está verificado!").setEphemeral(true).queue(); return;
+            }
+            TextInput input = TextInput.create("roblox_username", "Nome de usuário do Roblox", TextInputStyle.SHORT)
+                    .setPlaceholder("Digite seu usuário do Roblox").setRequired(true).setMaxLength(20).build();
+            event.replyModal(Modal.create("roblox_modal", "🎮 Verificação Roblox").addActionRow(input).build()).queue();
+
+        } else if (event.getComponentId().equals("go_sorteio")) {
+            event.reply("🎁 **Link do Sorteio:**\n" + SORTEIO_CANAL_LINK + "\n\nBoa sorte! 🍀").setEphemeral(true).queue();
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // HELPERS INTERNOS
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Aplica punição de palavrão (aviso → timeout 1h no 3º).
+     */
+    private void applyProfanityPunishment(MessageReceivedEvent event, String userId, String word) {
+        event.getMessage().delete().queue();
+        int w = userWarnings.getOrDefault(userId, 0) + 1;
+        userWarnings.put(userId, w);
+        if (w >= 3) {
+            event.getMember().timeoutFor(Duration.ofHours(1)).queue();
+            sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
+                    "🚫 SILENCIADO 1H", "**3 avisos atingidos!**\n> Timeout de **1 hora**.", Color.RED);
+            sendWarningDM(event.getMember(), "Linguagem inadequada (3x)", "Timeout 1h");
+            logPunishment(event.getGuild(), event.getMember(), "Linguagem (3x)", "Timeout 1h");
+            userWarnings.put(userId, 0);
+        } else {
+            sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
+                    "⚠️ AVISO " + w + "/3", "**Linguagem inadequada!**\n> No 3º aviso: timeout 1h.", Color.ORANGE);
+            sendWarningDM(event.getMember(), "Linguagem inadequada", "Aviso " + w + "/3");
+            logPunishment(event.getGuild(), event.getMember(), "Linguagem", "Aviso " + w + "/3");
+        }
+    }
 
     private void processMatchFromMessage(MessageReceivedEvent event, QueueEntry p1, QueueEntry p2, String modo) {
         TeamData t1 = teams.get(p1.userId);
@@ -1106,23 +1101,16 @@ public class Main extends ListenerAdapter {
                         "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n" +
                                 "## ⚽  " + nomeT1 + "  ×  " + nomeT2 + "\n" +
                                 "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n\n" +
-                                "🎮  Modo: **" + modo + "**\n" +
-                                "🏠  Host: **" + nomeHost + "**\n" +
-                                "🔗  " + linkInfo + "\n\n" +
-                                "> 📩 Verifiquem a DM para detalhes!"
-                )
-                .setColor(new Color(0xF1C40F))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                                "🎮  Modo: **" + modo + "**\n🏠  Host: **" + nomeHost + "**\n" +
+                                "🔗  " + linkInfo + "\n\n> 📩 Verifiquem a DM para detalhes!")
+                .setColor(new Color(0xF1C40F)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
         TextChannel matchChannel = event.getJDA().getTextChannelById(targetChannelId);
         if (matchChannel != null) {
-            matchChannel.sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">")
-                    .setEmbeds(embedCanal.build()).queue();
+            matchChannel.sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">").setEmbeds(embedCanal.build()).queue();
         } else {
-            event.getChannel().sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">")
-                    .setEmbeds(embedCanal.build()).queue();
+            event.getChannel().sendMessage("🎯 <@" + p1.userId + "> <@" + p2.userId + ">").setEmbeds(embedCanal.build()).queue();
         }
 
         EmbedBuilder dmHost = new EmbedBuilder()
@@ -1131,16 +1119,12 @@ public class Main extends ListenerAdapter {
                         "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n" +
                                 "## ⚽  " + nomeT1 + "  ×  " + nomeT2 + "\n" +
                                 "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n\n" +
-                                "🎮  Modo: **" + modo + "**\n" +
-                                "🏠  Você é o **HOST!**\n" +
+                                "🎮  Modo: **" + modo + "**\n🏠  Você é o **HOST!**\n" +
                                 "🔗  Seu servidor: " + linkInfo + "\n" +
                                 "👤  Adversário: <@" + guestEntry.userId + "> — **" + nomeT2 + "**\n\n" +
-                                "> 💬 Aguarde o adversário ou chame no privado!"
-                )
-                .setColor(new Color(0x2ECC71))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                                "> 💬 Aguarde o adversário ou chame no privado!")
+                .setColor(new Color(0x2ECC71)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
         EmbedBuilder dmGuest = new EmbedBuilder()
                 .setTitle("🏆  AMISTOSO ENCONTRADO!")
@@ -1148,19 +1132,89 @@ public class Main extends ListenerAdapter {
                         "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n" +
                                 "## ⚽  " + nomeT1 + "  ×  " + nomeT2 + "\n" +
                                 "**━━━━━━━━━━━━━━━━━━━━━━━━━━━━**\n\n" +
-                                "🎮  Modo: **" + modo + "**\n" +
-                                "🏠  Host: **" + nomeHost + "**\n" +
+                                "🎮  Modo: **" + modo + "**\n🏠  Host: **" + nomeHost + "**\n" +
                                 "🔗  Servidor: " + linkInfo + "\n" +
                                 "👤  Chame o host: <@" + hostEntry.userId + "> — **" + nomeHost + "**\n\n" +
-                                "> 💬 Chame o host no privado para confirmar!"
-                )
-                .setColor(new Color(0x3498DB))
-                .setThumbnail(CUSTOM_ICON)
-                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON)
-                .setTimestamp(Instant.now());
+                                "> 💬 Chame o host no privado para confirmar!")
+                .setColor(new Color(0x3498DB)).setThumbnail(CUSTOM_ICON)
+                .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
 
         sendDM(event.getJDA(), hostEntry.userId,  dmHost.build());
         sendDM(event.getJDA(), guestEntry.userId, dmGuest.build());
+    }
+
+    private boolean isAdmin(MessageReceivedEvent event) {
+        return event.getMember() != null && event.getMember().hasPermission(Permission.ADMINISTRATOR);
+    }
+
+    private void sendWarningDM(Member member, String reason, String action) {
+        member.getUser().openPrivateChannel().queue(ch -> {
+            EmbedBuilder embed = new EmbedBuilder()
+                    .setTitle("⚠️  Aviso de Moderação — PAFO").setDescription("Você recebeu uma advertência no servidor.")
+                    .addField("📋  Motivo", reason, false).addField("⚡  Ação Tomada", action, false)
+                    .addField("📌  Dica", "Leia as regras do servidor para evitar futuras punições.", false)
+                    .setColor(Color.ORANGE).setThumbnail(CUSTOM_ICON)
+                    .setFooter("Sistema AutoMod • PAFO", CUSTOM_ICON).setTimestamp(Instant.now());
+            ch.sendMessageEmbeds(embed.build()).queue(
+                    ok  -> logger.info("DM aviso para {}", member.getUser().getName()),
+                    err -> logger.warn("DM bloqueada: {}", member.getUser().getName())
+            );
+        }, err -> logger.warn("Sem DM: {}", member.getUser().getName()));
+    }
+
+    private void logPunishment(Guild guild, Member member, String reason, String action) {
+        TextChannel ch = guild.getTextChannelById(LOG_CHANNEL_ID);
+        if (ch == null) return;
+        ch.sendMessageEmbeds(new EmbedBuilder()
+                .setTitle("🛡️  Registro de Punição")
+                .addField("👤  Usuário", member.getAsMention() + " (" + member.getId() + ")", false)
+                .addField("📋  Motivo", reason, false).addField("⚡  Ação", action, false)
+                .setColor(Color.RED).setThumbnail(member.getUser().getAvatarUrl())
+                .setFooter("Log Automático • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build()).queue();
+    }
+
+    private void sendTemporaryWarning(TextChannel channel, Member member, String title, String description, Color color) {
+        channel.sendMessageEmbeds(new EmbedBuilder()
+                        .setTitle(title).setDescription(member.getAsMention() + " " + description)
+                        .setColor(color).setThumbnail(CUSTOM_ICON)
+                        .setFooter("Sistema AutoMod • PAFO", CUSTOM_ICON).setTimestamp(Instant.now()).build())
+                .queue(msg -> scheduler.schedule(() -> msg.delete().queue(), 60, TimeUnit.SECONDS));
+    }
+
+    private boolean isInQueue(String userId) {
+        return queues.values().stream().anyMatch(l -> l.stream().anyMatch(e -> e.userId.equals(userId)));
+    }
+
+    private String getQueueMode(String userId) {
+        for (var entry : queues.entrySet())
+            if (entry.getValue().stream().anyMatch(e -> e.userId.equals(userId)))
+                return entry.getKey();
+        return null;
+    }
+
+    private QueueEntry[] tryMatch(String modo) {
+        List<QueueEntry> list = queues.computeIfAbsent(modo, k -> Collections.synchronizedList(new ArrayList<>()));
+        synchronized (list) {
+            if (list.size() < 2) return null;
+            QueueEntry host = null, guest = null;
+            for (QueueEntry e : list) {
+                if (e.isHost  && host  == null) host  = e;
+                if (!e.isHost && guest == null) guest = e;
+                if (host != null && guest != null) break;
+            }
+            QueueEntry p1, p2;
+            if (host != null && guest != null && !host.userId.equals(guest.userId)) {
+                p1 = host; p2 = guest;
+            } else {
+                p1 = list.get(0); p2 = null;
+                for (int i = 1; i < list.size(); i++) {
+                    if (!list.get(i).userId.equals(p1.userId)) { p2 = list.get(i); break; }
+                }
+                if (p2 == null) return null;
+            }
+            list.remove(p1); list.remove(p2);
+            return new QueueEntry[]{p1, p2};
+        }
     }
 
     private void sendDMToAll(MessageReceivedEvent event, String text, MessageEmbed embed, ActionRow row) {
@@ -1168,7 +1222,6 @@ public class Main extends ListenerAdapter {
             var targets = members.stream().filter(m -> !m.getUser().isBot()).toList();
             event.getChannel().sendMessage("🚀 Enviando para **" + targets.size() + "** membros...").queue();
             AtomicInteger sent = new AtomicInteger(), fail = new AtomicInteger();
-
             for (int i = 0; i < targets.size(); i++) {
                 Member m = targets.get(i);
                 scheduler.schedule(() -> m.getUser().openPrivateChannel().queue(
@@ -1180,11 +1233,9 @@ public class Main extends ListenerAdapter {
                         err -> fail.incrementAndGet()
                 ), (long) i * DELAY_PER_MESSAGE_MS, TimeUnit.MILLISECONDS);
             }
-
             long delay = (long) targets.size() * DELAY_PER_MESSAGE_MS + 5000;
             scheduler.schedule(() -> event.getChannel().sendMessage(
-                    "📊 **Relatório:** ✅ " + sent.get() + "  ❌ " + fail.get()
-            ).queue(), delay, TimeUnit.MILLISECONDS);
+                    "📊 **Relatório:** ✅ " + sent.get() + "  ❌ " + fail.get()).queue(), delay, TimeUnit.MILLISECONDS);
         });
     }
 
@@ -1193,6 +1244,10 @@ public class Main extends ListenerAdapter {
                 .setColor(new Color(0xE74C3C)).setThumbnail(CUSTOM_ICON)
                 .setFooter("Bot Amistosos • PAFO", CUSTOM_ICON);
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // DATA CLASSES
+    // ══════════════════════════════════════════════════════════════════════════
 
     private static class TeamData {
         final String nome; final boolean temHost; final String link;
