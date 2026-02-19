@@ -220,45 +220,6 @@ public class Main extends ListenerAdapter {
         return false;
     }
 
-    /**
-     * Detecta "keyboard spam" / "flood de teclas aleatórias".
-     * Exemplos: "hsahdsaudadisasaiu", "asduaisdui", "qweasdzxc", "aaaaaaaaaa"
-     *
-     * Critérios (qualquer um basta):
-     *  1. 5+ consoantes seguidas sem vogal (ex: "hsdgh")
-     *  2. Mesmo caractere repetido 6+ vezes (ex: "aaaaaaa", "kkkkkkk")
-     *  3. Sequências de teclado conhecidas (qwert, asdfg, etc.)
-     *  4. Texto com 12+ chars e menos de 15% de vogais
-     */
-    private boolean isKeyboardSpam(String text) {
-        if (text == null || text.length() < 6) return false;
-        String lower = text.toLowerCase();
-
-        // 1. Bloco de 5+ consoantes sem vogal
-        if (lower.matches(".*[bcdfghjklmnpqrstvwxyz]{5,}.*")) return true;
-
-        // 2. Mesmo char repetido 6+ vezes
-        if (lower.matches(".*(.)\\1{5,}.*")) return true;
-
-        // 3. Sequências de teclado
-        String[] seqs = {"qwert", "asdfg", "zxcvb", "yuiop", "hjkl",
-                "bnmv", "qazwsx", "wsxedc", "edcrfv", "rfvtgb", "tgbyhn"};
-        for (String seq : seqs) {
-            if (lower.contains(seq)) return true;
-        }
-
-        // 4. Proporção de vogais muito baixa em texto longo
-        if (lower.length() >= 12) {
-            long vogais = lower.chars()
-                    .filter(c -> "aeiouáéíóúàèìòùãõâêîôû".indexOf(c) >= 0)
-                    .count();
-            double ratio = (double) vogais / lower.length();
-            if (ratio < 0.15) return true;
-        }
-
-        return false;
-    }
-
     // ══════════════════════════════════════════════════════════════════════════
     // SLASH COMMANDS
     // ══════════════════════════════════════════════════════════════════════════
@@ -759,17 +720,6 @@ public class Main extends ListenerAdapter {
                         "⚠️ SPAM DETECTADO", "**Pare de enviar mensagens tão rápido!**\n> 5+ msgs em 5 segundos.", Color.ORANGE);
                 sendWarningDM(event.getMember(), "Spam velocidade (5+ em 5s)", "Mensagem deletada");
                 logPunishment(event.getGuild(), event.getMember(), "Spam velocidade", "Deletado");
-                return;
-            }
-
-            // ── 2. Anti-flood de teclado aleatório (hsahdsaudad, qweasdzxc...) ────
-            if (isKeyboardSpam(lower)) {
-                event.getMessage().delete().queue();
-                sendTemporaryWarning(event.getChannel().asTextChannel(), event.getMember(),
-                        "⚠️ MENSAGEM INVÁLIDA",
-                        "**Não mande texto aleatório no chat!**\n> Envie uma mensagem real.", Color.ORANGE);
-                sendWarningDM(event.getMember(), "Flood de teclado aleatório", "Mensagem deletada");
-                logPunishment(event.getGuild(), event.getMember(), "Keyboard spam", "Deletado");
                 return;
             }
 
