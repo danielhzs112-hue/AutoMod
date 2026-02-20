@@ -198,36 +198,6 @@ public class Main extends ListenerAdapter {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // WELCOME
-    // ══════════════════════════════════════════════════════════════════════════
-
-    @Override
-    public void onGuildMemberJoin(GuildMemberJoinEvent event) {
-        TextChannel channel = event.getGuild().getTextChannelById(WELCOME_CHANNEL_ID);
-        if (channel == null) return;
-
-        String serverIcon = event.getGuild().getIconUrl();
-        if (serverIcon == null) serverIcon = CUSTOM_ICON;
-
-        EmbedBuilder embed = new EmbedBuilder()
-                .setAuthor("PAFO", null, serverIcon)
-                .setTitle("Bem-Vindo(a) a PAFO")
-                .setThumbnail(serverIcon)
-                .setDescription(
-                        "Bem-vindo(a), " + event.getMember().getAsMention() + "! Ficamos felizes por você ter se juntado à 🌌 PAFO.\n\n" +
-                                "Por favor, certifique-se de ler as regras em:\nhttps://discord.com/channels/1449061779060687063/1449067621411459183\n\n" +
-                                "↳ Você pode obter ajuda com nosso suporte no canal\nhttps://discord.com/channels/1449061779060687063/1449068500567068804\n\n" +
-                                "↳ Você pode encontrar mais informações em\nhttps://discord.com/channels/1449061779060687063/1454098611754373296\n\n" +
-                                "↳ ⚠️ Certifique-se de verificar sua conta em\nhttps://discord.com/channels/1449061779060687063/1464627654744477819"
-                )
-                .setColor(new Color(0x1B2A4A))
-                .setFooter("© 2026 PAFO", serverIcon)
-                .setTimestamp(Instant.now());
-
-        channel.sendMessageEmbeds(embed.build()).queue();
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
     // SLASH COMMANDS
     // ══════════════════════════════════════════════════════════════════════════
 
