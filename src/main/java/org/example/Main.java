@@ -54,7 +54,6 @@ public class Main extends ListenerAdapter {
     private static final String SCRIM_CHANNEL        = "1450548729303011379";
     private static final String LOG_CHANNEL_ID       = "1449525327175880865";
     private static final String GFX_CHANNEL_ID       = "1461773344620941534";
-    private static final String WELCOME_CHANNEL_ID   = "1449067457082949752";
 
     private static final List<String> AMIS_CHANNELS = Arrays.asList(
             "1449070534934401044",
